@@ -1,12 +1,15 @@
 # CMF Headphone Pro Windows App Specification
 
-Status: implementation in progress; updated 15 October 2026. Target: CMF
+Status: implementation in progress; updated 21 October 2026. Target: CMF
 Headphone Pro (B175 / Forretress), Windows, initially firmware 1.0.1.49.
-The Rust/Tauri editor and read-only Windows Bluetooth connection are
-implemented in source. The new connection needs a Windows build and live
-verification. Headphone-setting writes and Windows volume integration
-remain pending. This document specifies the requested features;
-it does not establish new hardware results.
+The Rust/Tauri editor, Bluetooth connection, ANC writes, and EQ Apply/Restore
+are implemented in source. Punch/Deep bass drafts, sound controls, headroom
+estimation, draft save/export, and durable EQ backups are also implemented.
+The native implementation still needs a Windows build and live verification;
+Windows volume and spatial writes remain pending. See
+[the current implementation notes](PUNCH-IMPLEMENTATION.md), which supersede
+older implementation-status descriptions below. This specification does
+not establish new hardware results.
 
 Current GUI: Rust backend with an HTML/CSS/JavaScript frontend hosted in
 Tauri. Moving the interface entirely into Rust, potentially using
