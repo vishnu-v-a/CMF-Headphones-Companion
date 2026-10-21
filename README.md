@@ -36,10 +36,35 @@ matching device readback before the app reports success.
 Spatial audio displays **Off**, **Cinema**, and **Concert**. These buttons
 remain disabled pending a confirmed Headphone Pro mode command mapping;
 the existing boolean readback cannot distinguish Cinema from Concert.
-EQ Apply/Restore, spatial writes and Windows volume remain unavailable.
+The desktop source now includes **Punch** and **Deep bass** starting presets,
+Deep bass / Punch / Clarity controls, estimated headroom, local draft saving
+and Equalizer APO text export. The Harman reference remains available under
+Profiles. Presets are listening starting points, not measured Sony or Realme
+matches, and the graph is not an acoustic measurement or loudness meter.
+
+**Apply to headphones** reviews the device address, firmware and all active
+filters. Select **Custom EQ** in Nothing X first; Custom-preset activation is
+not automatically detected or changed. The app saves the current EQ before
+the first write, then requires matching EQ readback. **Profiles → Restore
+original** restores that backup and verifies it. Existing backups are never
+replaced by later applies or reconnections. Settings may remain on the
+headphones after closing the app; exit does not restore them.
+
+Backups are stored under the Tauri application-data folder:
+`%APPDATA%\app.cmfeq.desktop\eq-backups\<address>\<encoded-firmware>\original-eq.json`.
+They are specific to the device and firmware and are separate from the
+Python prototype's backups. Readback verifies stored values, not audible
+Custom-mode activation. More bass can require more preamp attenuation;
+these features do not unlock additional Bluetooth amplifier output.
+
+Spatial writes and Windows volume remain unavailable.
 The new Rust transport still requires a GitHub Actions build and live-device
 verification; the earlier Python hardware findings are not verification of
 this Rust connection implementation.
+
+See [the Punch implementation notes](docs/PUNCH-IMPLEMENTATION.md) for
+usage, failure handling, and the remaining Windows/hardware checks. This
+revision has not yet been built on GitHub or exercised on live headphones.
 
 The commands below run the older Python investigation page.
 
