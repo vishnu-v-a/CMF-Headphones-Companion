@@ -1,11 +1,15 @@
 import { responseDb } from './response.mjs';
+import { presets, tuningProfile, headroom, exportProfile } from './tuning.mjs';
 
 const $ = selector => document.querySelector(selector);
 const invoke = window.__TAURI__?.core?.invoke;
-const referenceFilters = [[29,-.9,2],[50,-5.4,.5],[60,1,1],[240,-4.5,1.5],[2000,2.5,1.2],[5900,3.8,1.1],[10000,4.8,2]];
-let name = 'Harman 2018 target', skipped = [8], pending = null, importVersion = 0;
-let rows = referenceFilters.map(([frequency,gain,q], i) => ({id:i+1, kind:'PK', frequency, gain, q, enabled:true}));
-rows.push({id:8,kind:'PK',frequency:1000,gain:0,q:1,enabled:false});
+const startingProfile = tuningProfile(presets.punch, 'Punch');
+const draftKey = 'cmf-eq-draft-v1';
+const bassCondition = 'Bass starting point · Custom EQ, ANC High, bass slider minimum, spatial off.';
+let name = startingProfile.name, skipped = [], pending = null, importVersion = 0;
+let rows = startingProfile.filters.map(filter => ({...filter, enabled: true}));
+while (rows.length < 8) rows.push({id:rows.length+1,kind:'PK',frequency:1000,gain:0,q:1,enabled:false});
+let toneValues = {...presets.punch}, previousDraft = null, writeReview = null, notificationTimer;
 let selectedBand = 0;
 let connection = { connected: false }, connectionBusy = false, pollTimer;
 let ancExpanded = false;
@@ -65,6 +69,7 @@ function renderConnection() {
     button.setAttribute('aria-pressed', String(connected && connection.spatial === false && button.dataset.spatial === 'off'));
     button.title = 'Mode control unavailable in this build.';
   }
+  renderEqState();
 }
 
 async function setAnc(mode) {
@@ -114,7 +119,9 @@ function connectionMessage(prefix) {
 
 function schedulePoll() {
   clearTimeout(pollTimer);
-  if (connection.connected && !document.hidden) pollTimer = setTimeout(() => readHeadphones(true), 15000);
+  if (connection.connected && !connectionBusy && !document.hidden && !$('#eq-confirm').open) {
+    pollTimer = setTimeout(() => readHeadphones(true), 15000);
+  }
 }
 
 async function scanDevices() {
@@ -268,9 +275,12 @@ document.addEventListener('keydown', event => {
 });
 
 function message(text, error = false) {
+  clearTimeout(notificationTimer);
   $('#message').textContent = text;
   $('#message').title = text;
-  $('#notification').hidden = !error;
+  $('#notification').classList.toggle('is-error', error);
+  $('#notification').hidden = false;
+  if (!error) notificationTimer = setTimeout(() => { $('#notification').hidden = true; }, 5000);
 }
 
 function draft() {
@@ -302,6 +312,8 @@ function closeBandEditor(restoreFocus = true) {
 }
 
 function openBandEditor(index) {
+  $('#tone-panel').hidden = true;
+  $('#toggle-tone').setAttribute('aria-expanded', 'false');
   selectedBand = index;
   const filter = rows[index];
   $('#band-title').textContent = `Band ${String(index + 1).padStart(2, '0')}`;
@@ -363,8 +375,8 @@ function update() {
     const current=draft();
     if(!Number.isFinite(current.preamp)||current.filters.some(f=>![f.frequency,f.gain,f.q].every(Number.isFinite)||f.q<=0))throw Error('Enter finite EQ values and a positive Q.');
     draw(current);
-    message(connection.connected ? 'Editor draft · headphone settings unchanged.' : 'Offline draft · no settings applied.');
-  } catch(error){$('#response').replaceChildren();message(error.message,true);}
+  } catch(error){$('#response').replaceChildren();}
+  renderEqState();
 }
 
 function draw(profile) {
@@ -390,28 +402,271 @@ function draw(profile) {
   }
 }
 
-function useProfile(profile, condition = 'Imported draft · match ANC to the profile’s measurement condition.') {
+function useProfile(profile, condition = 'Imported draft · match ANC to the profile’s measurement condition.', tone = null) {
   closeBandEditor(false);
+  toneValues = tone ? {...tone} : null;
   name=profile.name;skipped=profile.disabled_filters;rows=profile.filters.map(filter=>({...filter,enabled:true}));
   let id=Math.max(0,...rows.map(row=>row.id));
   while(rows.length<8)rows.push({id:++id,kind:'PK',frequency:1000,gain:0,q:1,enabled:false});
   selectedBand=0;
   $('#preamp').value=profile.preamp;renderBands();update();
   $('#condition').textContent=condition;
+  syncToneControls();
 }
 
-$('#preamp').oninput=update;
+$('#preamp').oninput=() => { toneValues = null; syncToneControls(); update(); };
 $('#close-band').onclick = () => { closeBandEditor(); update(); };
-$('#band-enabled').onchange = event => { rows[selectedBand].enabled = event.target.checked; update(); };
-$('#band-kind').onchange = event => { rows[selectedBand].kind = event.target.value; update(); };
+$('#band-enabled').onchange = event => { toneValues = null; syncToneControls(); rows[selectedBand].enabled = event.target.checked; update(); };
+$('#band-kind').onchange = event => { toneValues = null; syncToneControls(); rows[selectedBand].kind = event.target.value; update(); };
 for (const field of ['frequency', 'gain', 'q']) {
   $(`#band-${field}`).oninput = event => {
     const input = event.target;
     rows[selectedBand][field] = input.value === '' ? NaN : Number(input.value);
+    toneValues = null;
+    syncToneControls();
     input.setCustomValidity(field === 'q' && rows[selectedBand].q <= 0 ? 'Q must be greater than zero.' : '');
     update();
   };
 }
+function syncToneControls() {
+  for (const key of ['deep', 'punch', 'clarity']) {
+    const slider = $(`#tone-${key}`);
+    slider.disabled = !toneValues;
+    if (toneValues) slider.value = toneValues[key];
+    $(`#tone-${key}-value`).value = toneValues ? `${slider.value}%` : '—';
+  }
+  $('#tone-help').textContent = toneValues
+    ? 'Relative bass tuning · automatic headroom may lower overall level.'
+    : 'Advanced/imported draft · choose a preset to use sound controls.';
+  for (const button of document.querySelectorAll('[data-preset]')) {
+    button.setAttribute('aria-pressed', String(Boolean(toneValues && name === presets[button.dataset.preset].name)));
+  }
+}
+
+function renderEqState() {
+  let valid = false;
+  try {
+    const profile = draft(), estimate = headroom(profile);
+    valid = estimate.outputPeak <= 0;
+    $('#headroom-status').textContent = valid
+      ? `Estimated peak ${estimate.outputPeak.toFixed(1)} dB · draft`
+      : `Needs ${estimate.outputPeak.toFixed(1)} dB more headroom`;
+    $('#headroom-status').classList.toggle('invalid-draft', !valid);
+    $('#headroom-status').title = `48 kHz mathematical response estimate, not measured loudness or a guarantee against transient clipping. Suggested preamp: ${estimate.recommended} dB.`;
+    $('#auto-headroom').disabled = false;
+    $('#save-draft').disabled = false;
+    $('#export-draft').disabled = false;
+  } catch (error) {
+    $('#headroom-status').textContent = error.message;
+    $('#headroom-status').title = error.message;
+    $('#headroom-status').classList.add('invalid-draft');
+    $('#auto-headroom').disabled = true;
+    $('#save-draft').disabled = true;
+    $('#export-draft').disabled = true;
+  }
+  const canWrite = Boolean(invoke && connection.connected && !connectionBusy && connection.firmware && !connection.snapshot_error);
+  $('#apply-eq').disabled = !canWrite || !valid || !connection.eq;
+  $('#apply-eq').title = !invoke ? 'Open the desktop app to apply EQ.' : !connection.connected ? 'Connect your headphones first.' : !valid ? 'Fix the draft or use Auto headroom.' : connection.snapshot_error || 'Review the selected device and EQ before applying.';
+  $('#restore-eq').disabled = !canWrite || !connection.snapshot;
+  const eq = connection.eq;
+  const states = { verified: 'Last request matches readback', different: 'Readback differs from last request', uncertain: 'EQ uncertain · read again', pending: 'Waiting for readback' };
+  $('#device-eq-status').textContent = !invoke ? 'Browser preview · Apply and device reads need the desktop app.' : !connection.connected ? 'Connect to read the headphone EQ.'
+    : `${eq ? `Device: ${eq.filters.length} bands · ${eq.preamp} dB preamp` : 'Device EQ unavailable'}${states[connection.eq_write_state] ? ` · ${states[connection.eq_write_state]}` : ' · review values ↗'}`;
+  $('#device-eq-status').title = connection.eq_write_note || $('#device-eq-status').textContent;
+  $('#device-eq-status').disabled = connectionBusy || !connection.connected || (!eq && !connection.requested_eq);
+  $('#device-eq-status').classList.toggle('invalid-draft', ['different', 'uncertain'].includes(connection.eq_write_state));
+  const snapshot = connection.snapshot;
+  $('#snapshot-status').textContent = connection.snapshot_error || (snapshot
+    ? `Original EQ: ${snapshot.bands} bands · ${snapshot.preamp} dB · saved ${new Date(snapshot.captured_at * 1000).toLocaleString()}.`
+    : 'An original EQ backup is saved before your first Apply. Existing backups are kept.');
+}
+
+function captureDraft() {
+  return { profile: draft(), condition: $('#condition').textContent, tone: toneValues ? {...toneValues} : null };
+}
+
+for (const button of document.querySelectorAll('[data-preset]')) {
+  button.onclick = () => {
+    try { previousDraft = captureDraft(); } catch { /* An invalid draft is never saved as an undo target. */ }
+    const preset = presets[button.dataset.preset];
+    useProfile(tuningProfile(preset, preset.name), bassCondition, preset);
+    $('#tone-panel').hidden = false;
+    $('#toggle-tone').setAttribute('aria-expanded', 'true');
+    $('#undo-preset').disabled = !previousDraft;
+  };
+}
+$('#undo-preset').onclick = () => {
+  if (!previousDraft) return;
+  const previous = previousDraft;
+  previousDraft = null;
+  useProfile(previous.profile, previous.condition, previous.tone);
+  $('#undo-preset').disabled = true;
+};
+for (const key of ['deep', 'punch', 'clarity']) {
+  $(`#tone-${key}`).oninput = event => {
+    if (!toneValues) return;
+    const values = {...toneValues, [key]: Number(event.target.value)};
+    useProfile(tuningProfile(values), bassCondition, values);
+  };
+}
+$('#toggle-tone').onclick = () => {
+  const show = $('#tone-panel').hidden;
+  if (show) closeBandEditor(false);
+  $('#tone-panel').hidden = !show;
+  $('#toggle-tone').setAttribute('aria-expanded', String(show));
+};
+$('#auto-headroom').onclick = () => {
+  try { $('#preamp').value = headroom(draft()).recommended; update(); }
+  catch (error) { message(error.message, true); }
+};
+$('#save-draft').onclick = () => {
+  try {
+    localStorage.setItem(draftKey, JSON.stringify({ version: 1, ...captureDraft() }));
+    message('Draft saved on this computer. Headphone settings are unchanged.');
+  } catch (error) { message(`Could not save draft: ${error.message}`, true); }
+};
+$('#export-draft').onclick = () => {
+  try {
+    const profile = draft();
+    const url = URL.createObjectURL(new Blob([exportProfile(profile)], {type:'text/plain;charset=utf-8'}));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${profile.name.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 80) || 'cmf-profile'}.txt`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    message('Export requested. The file contains your editor draft.');
+  } catch (error) { message(error.message, true); }
+};
+
+function initializeDraft() {
+  useProfile(startingProfile, bassCondition, presets.punch);
+  try {
+    const text = localStorage.getItem(draftKey);
+    if (!text) return;
+    if (text.length > 256 * 1024) throw Error('Saved draft is too large.');
+    const saved = JSON.parse(text), profile = saved.profile;
+    const finite = value => typeof value === 'number' && Number.isFinite(Math.fround(value));
+    const ids = new Set();
+    if (saved.version !== 1 || typeof profile?.name !== 'string' || !finite(profile.preamp)
+      || !Array.isArray(profile.filters) || profile.filters.length < 1 || profile.filters.length > 8
+      || !Array.isArray(profile.disabled_filters)) throw Error('Saved draft format is invalid.');
+    for (const filter of profile.filters) {
+      if (!Number.isSafeInteger(filter.id) || filter.id <= 0 || ids.has(filter.id)
+        || !['PK','LS','HS'].includes(filter.kind) || !validBand(filter)
+        || ![filter.frequency, filter.gain, filter.q].every(finite)) throw Error('Saved band settings are invalid.');
+      ids.add(filter.id);
+    }
+    for (const id of profile.disabled_filters) {
+      if (!Number.isSafeInteger(id) || id <= 0 || ids.has(id)) throw Error('Saved filter IDs are invalid.');
+      ids.add(id);
+    }
+    let tone = null;
+    if (saved.tone) {
+      try {
+        const rebuilt = tuningProfile(saved.tone);
+        const same = (left, right) => Math.fround(left) === Math.fround(right);
+        if (same(profile.preamp, rebuilt.preamp) && profile.filters.length === rebuilt.filters.length
+          && profile.filters.every((filter, index) => filter.kind === rebuilt.filters[index].kind
+            && ['frequency','gain','q'].every(key => same(filter[key], rebuilt.filters[index][key])))) tone = saved.tone;
+      } catch { /* Hand-edited profiles reopen with the advanced controls. */ }
+    }
+    useProfile(profile, typeof saved.condition === 'string' ? saved.condition : 'Saved editor draft.', tone);
+    showTab('eq');
+  } catch (error) { message(`Saved draft could not be loaded. Punch draft opened instead. ${error.message}`, true); }
+}
+
+function appendProfileRows(profile, label = '') {
+  const body = $('#eq-confirm-bands');
+  if (label) {
+    const tr = document.createElement('tr'), cell = document.createElement('th');
+    cell.colSpan = 5;
+    cell.textContent = `${label} · ${profile.preamp} dB preamp`;
+    tr.append(cell); body.append(tr);
+  }
+  for (const [index, filter] of profile.filters.entries()) {
+    const tr = document.createElement('tr');
+    for (const value of [index + 1, filter.kind, filter.frequency, filter.gain, filter.q]) {
+      const td = document.createElement('td');
+      td.textContent = typeof value === 'number' ? String(Number(value.toPrecision(6))) : value;
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+}
+
+async function reviewEq(action) {
+  if (!invoke || connectionBusy || !connection.connected) return;
+  clearTimeout(pollTimer);
+  connectionBusy = true;
+  renderConnection();
+  try {
+    const target = { address: connection.device.address, firmware: connection.firmware };
+    let profile = action === 'restore' ? await invoke('snapshot_profile') : action === 'apply' ? await invoke('validate_profile', {profile: draft()}) : null;
+    if (action === 'apply' && headroom(profile).outputPeak > 0) throw Error('Use Auto headroom before applying this draft.');
+    writeReview = {action, profile, ...target};
+    $('#eq-confirm-title').textContent = action === 'inspect' ? 'Headphone EQ readback' : action === 'restore' ? 'Restore your original EQ' : 'Review your EQ';
+    $('#eq-confirm-target').textContent = `${connection.device.name} · ${target.address} · firmware ${target.firmware}`;
+    $('#eq-confirm-summary').textContent = profile ? `${profile.name} · ${profile.filters.length} bands · ${profile.preamp} dB preamp.` : connection.eq_write_note || 'Stored filter values. Audible preset activation is not detected.';
+    $('#eq-confirm-bands').replaceChildren();
+    if (profile) appendProfileRows(profile);
+    else {
+      if (connection.requested_eq) appendProfileRows(connection.requested_eq, 'Last requested');
+      if (connection.eq) appendProfileRows(connection.eq, 'Read from headphones');
+    }
+    $('#eq-confirm-backup').textContent = action === 'inspect' ? 'Readback shows stored values; it does not measure sound or prove that Custom mode is active.'
+      : action === 'restore' ? 'Restores saved EQ values for this device and firmware. Preset selection, ANC, slider position and your draft are unchanged.'
+      : connection.snapshot ? 'Your existing original EQ backup will be kept.' : 'The current headphone EQ will be read and saved before applying.';
+    $('.custom-mode-check').hidden = action === 'inspect';
+    $('#custom-mode-confirmed').required = action !== 'inspect';
+    $('#custom-mode-confirmed').checked = false;
+    $('#confirm-eq').hidden = action === 'inspect';
+    $('#confirm-eq').textContent = action === 'restore' ? 'Restore and verify' : 'Apply and verify';
+    $('#cancel-eq').textContent = action === 'inspect' ? 'Close' : 'Cancel';
+    $('#eq-confirm-result').textContent = '';
+    $('#eq-confirm').showModal();
+  } catch (error) { message(String(error.message ?? error), true); }
+  finally { connectionBusy = false; renderConnection(); schedulePoll(); }
+}
+
+$('#apply-eq').onclick = () => reviewEq('apply');
+$('#restore-eq').onclick = () => reviewEq('restore');
+$('#device-eq-status').onclick = () => reviewEq('inspect');
+$('#cancel-eq').onclick = () => { if (!connectionBusy) $('#eq-confirm').close(); };
+$('#eq-confirm').addEventListener('cancel', event => { if (connectionBusy) event.preventDefault(); });
+$('#eq-confirm').addEventListener('close', () => { writeReview = null; schedulePoll(); });
+$('#eq-confirm-form').onsubmit = async event => {
+  event.preventDefault();
+  if (!writeReview || writeReview.action === 'inspect' || connectionBusy || !$('#custom-mode-confirmed').checked) return;
+  const review = writeReview;
+  connectionBusy = true;
+  renderConnection();
+  $('#confirm-eq').disabled = true;
+  $('#cancel-eq').disabled = true;
+  $('#custom-mode-confirmed').disabled = true;
+  $('#eq-confirm-result').textContent = 'Saving recovery settings, writing EQ, and checking device readback…';
+  try {
+    const args = { address: review.address, firmware: review.firmware, customModeConfirmed: true };
+    if (review.action === 'apply') args.profile = review.profile;
+    connection = await invoke(review.action === 'apply' ? 'apply_eq' : 'restore_eq', args);
+    $('#eq-confirm').close();
+    message(`EQ values verified by headphone readback.${connection.eq_write_note ? ` ${connection.eq_write_note}` : ''} Your editor draft is kept.`);
+  } catch (error) {
+    try { connection = await invoke('headphone_status'); }
+    catch { connection = {connected:false}; }
+    $('#eq-confirm').close();
+    message(String(error.message ?? error), true);
+  } finally {
+    connectionBusy = false;
+    $('#confirm-eq').disabled = false;
+    $('#cancel-eq').disabled = false;
+    $('#custom-mode-confirmed').disabled = false;
+    renderConnection();
+    schedulePoll();
+  }
+};
+
 $('#profile-file').onchange=async event=>{
   pendingCondition = 'Imported draft · match ANC to the profile’s measurement condition.';
   $('#preview-label').textContent = 'IMPORT PREVIEW';
@@ -430,13 +685,12 @@ $('#profile-file').onchange=async event=>{
 };
 $('#use-import').onclick=()=>{if(pending){useProfile(pending,pendingCondition);pending=null;$('#import-preview').hidden=true;showTab('eq', true);}};
 $('#cancel-import').onclick=()=>{++importVersion;pending=null;$('#import-preview').hidden=true;message('Import cancelled. Your draft is unchanged.');};
-$('#reference').onclick=async()=>{try{if(!invoke)throw Error('Load reference needs the desktop app. The preview starts with the reference tuning.');const profile=await invoke('reference_profile');++importVersion;pending=null;$('#import-preview').hidden=true;useProfile(profile);$('#condition').textContent='Reference tuning · ANC maximum.';showTab('eq', true);}catch(error){message(String(error.message??error),true);}};
-renderBands();update();
+$('#reference').onclick=async()=>{try{if(!invoke)throw Error('Load reference needs the desktop app. This preview opens with a Punch draft.');const profile=await invoke('reference_profile');++importVersion;pending=null;$('#import-preview').hidden=true;useProfile(profile);$('#condition').textContent='Reference tuning · ANC maximum.';showTab('eq', true);}catch(error){message(String(error.message??error),true);}};
+initializeDraft();
 new ResizeObserver(() => {
   try { draw(draft()); }
   catch { $('#response').replaceChildren(); }
 }).observe($('#response'));
-if(!invoke)message('Browser preview · editing and graph work here. Import and Rust validation require the desktop app.');
 renderConnection();
 if (invoke) {
   (async () => {

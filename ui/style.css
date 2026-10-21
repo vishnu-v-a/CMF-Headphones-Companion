@@ -179,6 +179,41 @@ input:invalid { border-color: var(--error); }
 .notification { position: absolute; bottom: 14px; left: 14px; right: 14px; display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px; border-radius: 18px; background: var(--error-surface); color: var(--error); box-shadow: 0 4px 20px #0002; z-index: 5; }
 #message { flex: 1; min-width: 0; max-height: 130px; overflow-y: auto; overflow-wrap: anywhere; font-size: 11px; line-height: 1.5; user-select: text; }
 .notification .icon-button { flex: none; color: inherit; }
+.notification:not(.is-error) { background: var(--selected); color: var(--ink); }
+.sound-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex: none; }
+.sound-heading button { padding: 6px 9px; font-size: 10px; }
+.preset-buttons { display: flex; gap: 3px; }
+.preset-buttons button { border-radius: 7px; }
+.preset-buttons button:first-child { border-radius: 18px 7px 7px 18px; }
+.preset-buttons button:last-child { border-radius: 7px 18px 18px 7px; }
+.preset-buttons button[aria-pressed=true] { background: var(--orange); color: var(--on-primary); }
+.tone-panel { background: var(--surface); border-radius: 18px; padding: 10px 12px; flex: none; }
+.tone-panel p { font-size: 10px; line-height: 1.35; margin-bottom: 8px; }
+.tone-sliders { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.tone-sliders label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; font-size: 10px; min-width: 0; }
+.tone-sliders output { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tone-sliders input { flex-basis: 100%; margin: 4px 0 0; }
+.eq-footer { flex: none; display: grid; gap: 6px; }
+.headroom-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; }
+.headroom-line > span { min-width: 0; }
+.headroom-line button { padding: 5px 8px; font-size: 10px; white-space: nowrap; }
+.invalid-draft { color: var(--error) !important; }
+#device-eq-status { padding: 0; background: transparent; text-align: left; border-radius: 0; font-size: 10px; line-height: 1.35; font-weight: 400; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#device-eq-status:disabled { opacity: 1; cursor: default; }
+.eq-actions { display: grid; grid-template-columns: 1fr 1fr 1.8fr; gap: 6px; }
+.eq-actions button { padding: 9px 6px; font-size: 10px; justify-content: center; }
+dialog { border: 1px solid var(--line); border-radius: 22px; padding: 18px; width: calc(100% - 28px); max-width: 440px; max-height: calc(100dvh - 28px); background: var(--background); color: var(--ink); box-shadow: 0 12px 45px #0005; }
+dialog::backdrop { background: #100a07aa; }
+dialog form { display: grid; gap: 12px; }
+#eq-confirm-target { overflow-wrap: anywhere; }
+.confirm-table-wrap { max-height: 175px; overflow: auto; border-radius: 10px; background: var(--surface); }
+.confirm-table { width: 100%; border-collapse: collapse; font-size: 10px; font-variant-numeric: tabular-nums; }
+.confirm-table th, .confirm-table td { padding: 6px; text-align: right; border-bottom: 1px solid var(--field); }
+.confirm-table th:first-child, .confirm-table td:first-child { text-align: left; }
+.confirm-table th[colspan] { text-align: left; color: var(--orange); }
+.custom-mode-check { display: flex; align-items: center; gap: 8px; font-size: 11px; line-height: 1.5; }
+.custom-mode-check input { accent-color: var(--orange); flex: none; }
+#eq-confirm-result:empty { display: none; }
 .band-guide { stroke: var(--orange); stroke-width: 1; stroke-dasharray: 5 6; opacity: .6; }
 .band-dot { fill: var(--orange); stroke: var(--surface); stroke-width: 3; }
 @keyframes enter { from { opacity: .5; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -202,6 +237,8 @@ input:invalid { border-color: var(--error); }
     .band-button { padding-top: 6px; padding-bottom: 6px; }
     .control-card { padding: 10px 12px; }
     .anc-levels { margin-top: 8px; }
+    .tone-panel { padding: 8px 10px; }
+    .eq-actions button { padding-top: 7px; padding-bottom: 7px; }
 }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }

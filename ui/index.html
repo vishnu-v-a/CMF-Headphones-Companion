@@ -30,8 +30,17 @@
       <div class="control-card"><div class="card-heading"><label for="volume">Windows volume</label><span class="muted">—%</span></div><input id="volume" type="range" min="0" max="100" value="0" disabled aria-label="Windows playback volume unavailable"><span class="muted small">Playback control unavailable in this build.</span></div>
     </section>
     <section id="eq" class="view eq-view" role="tabpanel" aria-labelledby="tab-eq" tabindex="0" hidden>
-      <div class="view-heading"><div class="truncate"><span class="eyebrow">PARAMETRIC EQ</span><h1 id="profile-name">Harman 2018 target</h1></div><span id="band-count" class="badge">7 / 8</span></div>
+      <div class="view-heading"><div class="truncate"><span class="eyebrow">YOUR SOUND · EDITOR DRAFT</span><h1 id="profile-name">Punch</h1></div><span id="band-count" class="badge">4 / 8</span></div>
       <div class="response-card"><svg id="response" viewBox="0 0 920 240" role="img" aria-label="Requested EQ response including preamp"></svg><div class="graph-caption"><span><i></i> Combined response</span><div class="preamp"><label for="preamp">Preamp</label><div class="number-unit"><input id="preamp" type="number" step="any" value="-6.1" required aria-label="Preamp in decibels"><span>dB</span></div></div></div></div>
+      <div class="sound-heading"><div class="preset-buttons" role="group" aria-label="Sound starting points"><button data-preset="punch">Punch</button><button data-preset="deep">Deep bass</button><button id="undo-preset" disabled>Undo</button></div><button id="toggle-tone" aria-expanded="true" aria-controls="tone-panel">Sound controls</button></div>
+      <section id="tone-panel" class="tone-panel" aria-label="Bass and punch controls">
+        <p id="tone-help" class="small muted">Listening starting point · adjust, then Apply.</p>
+        <div class="tone-sliders">
+          <label for="tone-deep">Deep bass <output id="tone-deep-value" for="tone-deep">30%</output><input id="tone-deep" type="range" min="0" max="100" step="1" value="30"></label>
+          <label for="tone-punch">Punch <output id="tone-punch-value" for="tone-punch">65%</output><input id="tone-punch" type="range" min="0" max="100" step="1" value="65"></label>
+          <label for="tone-clarity">Clarity <output id="tone-clarity-value" for="tone-clarity">45%</output><input id="tone-clarity" type="range" min="0" max="100" step="1" value="45"></label>
+        </div>
+      </section>
       <div id="bands" class="band-strip" role="group" aria-label="EQ bands. Select a band to edit its settings."></div>
       <section id="band-editor" class="band-editor" aria-labelledby="band-title" hidden>
         <div class="band-editor-heading"><h2 id="band-title">Band 01</h2><label class="band-enabled"><span id="band-enabled-label">Enabled</span><input id="band-enabled" type="checkbox" role="switch" aria-label="Enable selected band"></label><button id="close-band" class="icon-button" aria-label="Close band settings" title="Close band settings (Escape)">×</button></div>
@@ -42,7 +51,12 @@
           <label>Q<input id="band-q" type="number" min="0" step="any" required></label>
         </div>
       </section>
-      <p id="condition" class="small muted">Reference tuning · ANC maximum.</p>
+      <p id="condition" class="small muted">Bass starting point · Custom EQ, ANC High, bass slider minimum, spatial off.</p>
+      <div class="eq-footer">
+        <div class="headroom-line"><span id="headroom-status" role="status"></span><button id="auto-headroom">Auto headroom</button></div>
+        <button id="device-eq-status" class="small muted" disabled>Connect to read the headphone EQ.</button>
+        <div class="eq-actions"><button id="save-draft">Save draft</button><button id="export-draft">Export .txt</button><button id="apply-eq" class="primary" disabled>Apply to headphones</button></div>
+      </div>
     </section>
     <section id="profiles" class="view profiles-view" role="tabpanel" aria-labelledby="tab-profiles" tabindex="0" hidden>
       <div class="view-heading"><div><span class="eyebrow">YOUR LIBRARY</span><h1>Profiles</h1></div><span class="badge">AutoEQ</span></div>
@@ -50,10 +64,23 @@
       <div id="import-preview" class="import-preview" hidden><span id="preview-label" class="eyebrow">IMPORT PREVIEW</span><h2 id="import-name"></h2><p id="import-summary"></p><div class="preview-actions"><button id="cancel-import">Cancel</button><button id="use-import" class="primary">Use in editor</button></div></div>
       <div class="library-label"><span class="eyebrow">REFERENCE PROFILE</span></div>
       <button id="reference" class="profile-item"><span class="profile-mark" aria-hidden="true">≋</span><span class="profile-description"><strong>Harman 2018 target</strong><span class="muted small">7 bands · −6.1 dB · ANC maximum</span></span><span aria-hidden="true">↗</span></button>
-      <div class="view-bottom"><p class="small muted">Imports replace the editor draft only after confirmation. More than 8 active bands? The entire import is rejected.</p><div class="recovery-actions"><button id="read-device" disabled>Read device</button><button id="use-device-eq" disabled>Review device EQ</button><button disabled>Restore snapshot</button></div></div>
+      <div class="view-bottom"><p id="snapshot-status" class="small muted">An original EQ backup is saved before your first Apply.</p><div class="recovery-actions"><button id="read-device" disabled>Read device</button><button id="use-device-eq" disabled>Review device EQ</button><button id="restore-eq" disabled>Restore original</button></div></div>
     </section>
   </main>
   <div id="notification" class="notification" hidden><span id="message" role="status" aria-live="polite"></span><button id="dismiss-notification" class="icon-button" aria-label="Dismiss notification">×</button></div>
+  <dialog id="eq-confirm" aria-labelledby="eq-confirm-title">
+    <form id="eq-confirm-form">
+      <span class="eyebrow">HEADPHONE EQ</span><h2 id="eq-confirm-title">Review before applying</h2>
+      <p id="eq-confirm-target" class="small"></p>
+      <p id="eq-confirm-summary" class="small"></p>
+      <div class="confirm-table-wrap"><table class="confirm-table"><thead><tr><th>Band</th><th>Type</th><th>Hz</th><th>dB</th><th>Q</th></tr></thead><tbody id="eq-confirm-bands"></tbody></table></div>
+      <p id="eq-confirm-backup" class="small muted"></p>
+      <p class="small muted">Choose Custom EQ in Nothing X first. For bass presets: ANC High, bass slider minimum, spatial audio off. Then close Nothing X if it holds the connection.</p>
+      <label class="custom-mode-check"><input id="custom-mode-confirmed" type="checkbox" required> Custom EQ is selected in Nothing X.</label>
+      <p id="eq-confirm-result" class="small" role="status" aria-live="polite"></p>
+      <div class="preview-actions"><button id="cancel-eq" type="button">Cancel</button><button id="confirm-eq" type="submit" class="primary">Apply and verify</button></div>
+    </form>
+  </dialog>
 </div>
 <script type="module" src="app.mjs"></script>
 </body>
