@@ -1,6 +1,8 @@
-//! Windows Bluetooth Classic control connection with verified ANC writes.
+//! Windows Bluetooth Classic control connection with verified setting writes.
 use crate::autoeq::Profile;
 use crate::protocol::{self, Decoder};
+use crate::snapshots::{SnapshotInfo, SnapshotStore};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -29,15 +31,29 @@ pub struct ConnectionStatus {
     pub head_tracking: Option<bool>,
     pub eq: Option<Profile>,
     pub warnings: Vec<String>,
+    pub snapshot: Option<SnapshotInfo>,
+    pub snapshot_error: Option<String>,
+    pub requested_eq: Option<Profile>,
+    /// Empty until a write is attempted; then pending, verified, different, or uncertain.
+    pub eq_write_state: String,
+    pub eq_write_note: Option<String>,
 }
 
 #[derive(Default)]
 pub struct Controller {
     session: Option<Session>,
     status: ConnectionStatus,
+    snapshots: SnapshotStore,
 }
 
 impl Controller {
+    pub fn with_snapshot_directory(root: PathBuf) -> Self {
+        Self {
+            snapshots: SnapshotStore::new(root),
+            ..Self::default()
+        }
+    }
+
     pub fn status(&self) -> ConnectionStatus {
         self.status.clone()
     }
@@ -69,6 +85,7 @@ impl Controller {
         status.firmware = Some(read_text(&session.request(0xc042, &[], 8)?)?);
         self.status = status;
         self.session = Some(session);
+        self.update_snapshot_status();
         Ok(self.status())
     }
 
@@ -91,6 +108,8 @@ impl Controller {
                 ));
             }
         }
+        self.update_eq_verification();
+        self.update_snapshot_status();
         Ok(self.status())
     }
 
@@ -110,6 +129,142 @@ impl Controller {
             return Err("ANC change could not be verified. Settings refreshed; check the current mode.".into());
         }
         Ok(status)
+    }
+
+    fn update_snapshot_status(&mut self) {
+        self.status.snapshot = None;
+        self.status.snapshot_error = None;
+        if let (Some(device), Some(firmware)) = (&self.status.device, &self.status.firmware) {
+            match self.snapshots.load(&device.address, firmware) {
+                Ok(snapshot) => self.status.snapshot = snapshot.map(|snapshot| snapshot.info()),
+                Err(error) => self.status.snapshot_error = Some(error),
+            }
+        }
+    }
+
+    fn update_eq_verification(&mut self) {
+        if let Some(requested) = &self.status.requested_eq {
+            if self.status.eq_write_state == "uncertain" && self.status.eq.is_some() {
+                self.status.eq_write_note = None;
+            }
+            self.status.eq_write_state = match &self.status.eq {
+                Some(actual) if matches!((protocol::encode_eq(actual), protocol::encode_eq(requested)), (Ok(actual), Ok(expected)) if actual == expected) => "verified",
+                Some(_) => "different",
+                None => "uncertain",
+            }
+            .into();
+        }
+    }
+
+    fn confirm_write_target(&mut self, address: &str, firmware: &str) -> Result<(), String> {
+        let device = self
+            .status
+            .device
+            .as_ref()
+            .ok_or("Connect your headphones first.")?;
+        if !self.status.connected
+            || !device.address.eq_ignore_ascii_case(address)
+            || self.status.firmware.as_deref() != Some(firmware)
+        {
+            return Err("The connected device changed. Review the target before applying EQ.".into());
+        }
+        let session = self.session.as_mut().ok_or("Headphones are not connected.")?;
+        let current_firmware = read_text(&session.request(0xc042, &[], 8)?)?;
+        if current_firmware != firmware {
+            self.status.firmware = Some(current_firmware);
+            self.update_snapshot_status();
+            return Err("Firmware changed. Read settings and review the target again.".into());
+        }
+        Ok(())
+    }
+
+    pub fn apply_eq(
+        &mut self,
+        profile: Profile,
+        address: &str,
+        firmware: &str,
+        custom_mode_confirmed: bool,
+    ) -> Result<ConnectionStatus, String> {
+        // Custom-preset activation is not a verified command on this model yet.
+        if !custom_mode_confirmed {
+            return Err("Select Custom EQ in Nothing X and confirm it before applying.".into());
+        }
+        crate::autoeq::validate(&profile)?;
+        self.confirm_write_target(address, firmware)?;
+        let baseline = self
+            .session
+            .as_mut()
+            .ok_or("Headphones are not connected.")?
+            .request(0xc044, &[], 8)
+            .and_then(|bytes| protocol::decode_eq(&bytes))?;
+        self.status.eq = Some(baseline.clone());
+        let backup = self.snapshots.ensure(address, firmware, &baseline);
+        self.update_snapshot_status();
+        backup?; // A durable, validated recovery file is required before the write.
+        self.write_eq(profile)
+    }
+
+    pub fn snapshot_profile(&self) -> Result<Profile, String> {
+        let device = self
+            .status
+            .device
+            .as_ref()
+            .ok_or("Connect your headphones first.")?;
+        let firmware = self
+            .status
+            .firmware
+            .as_deref()
+            .ok_or("Read the headphone firmware first.")?;
+        self.snapshots
+            .load(&device.address, firmware)?
+            .map(|snapshot| snapshot.eq)
+            .ok_or("No backup exists for this device and firmware.".into())
+    }
+
+    pub fn restore_eq(
+        &mut self,
+        address: &str,
+        firmware: &str,
+        custom_mode_confirmed: bool,
+    ) -> Result<ConnectionStatus, String> {
+        if !custom_mode_confirmed {
+            return Err("Select Custom EQ in Nothing X and confirm it before restoring.".into());
+        }
+        self.confirm_write_target(address, firmware)?;
+        let profile = self.snapshot_profile()?;
+        self.write_eq(profile)
+    }
+
+    fn write_eq(&mut self, profile: Profile) -> Result<ConnectionStatus, String> {
+        let payload = protocol::encode_eq(&profile)?;
+        self.status.requested_eq = Some(profile);
+        self.status.eq_write_state = "pending".into();
+        self.status.eq_write_note = None;
+        self.status.eq = None;
+        let session = self.session.as_mut().ok_or("Headphones are not connected.")?;
+        let acknowledgement = session.request(0xf041, &payload, 8);
+        // A missing acknowledgement does not prove that the write failed.
+        // Always query the actual EQ; never automatically repeat a write.
+        let readback = session
+            .request(0xc044, &[], 8)
+            .and_then(|bytes| protocol::decode_eq(&bytes));
+        let read_error = readback.as_ref().err().cloned();
+        self.status.eq = readback.ok();
+        self.update_eq_verification();
+        if let Err(error) = acknowledgement {
+            self.status.eq_write_note = Some(format!("Write acknowledgement unavailable: {error}"));
+        }
+        match self.status.eq_write_state.as_str() {
+            "verified" => Ok(self.status()),
+            "different" => Err("Headphone EQ differs from the requested values. Review device EQ or restore your backup; your draft is unchanged.".into()),
+            _ => {
+                self.status.eq_write_note = Some(format!(
+                    "EQ may have changed. Readback unavailable: {}",
+                    read_error.unwrap_or_default()
+                ));
+                Err("EQ write is uncertain. Read device settings or reconnect before deciding whether to retry or restore. Your backup and draft are preserved.".into())
+            }
+        }
     }
 
     pub fn disconnect(&mut self) -> ConnectionStatus {
