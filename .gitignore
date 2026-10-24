@@ -3,6 +3,7 @@
 /gen/
 /node_modules/
 /.gradle/
+/icons/android/
 
 # Local investigation material and downloaded tools.
 /artifacts/

@@ -49,6 +49,7 @@ jobs:
       - name: Generate Android project
         run: |
           set -o pipefail
+          tauri icon ui/brand-mark.svg --output icons/android
           tauri android init --ci --skip-targets-install 2>&1 | tee android-init.log
           python tools/prepare_android.py
       - name: Build installable ARM64 APK

@@ -3,6 +3,7 @@
     "windows": [{"label": "main", "title": "CMF · EQ", "backgroundColor": "#080808"}]
   },
   "bundle": {
+    "icon": ["icons/android/icon.png"],
     "android": {"minSdkVersion": 24, "versionCode": 100}
   }
 }
