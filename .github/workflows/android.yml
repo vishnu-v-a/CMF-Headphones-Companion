@@ -29,7 +29,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: android-cache
         with:
           path: |
             ~/.cargo/registry
@@ -37,6 +38,7 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
             target/aarch64-linux-android
+            target/debug
             ~/.android/debug.keystore
           key: android-arm64-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: android-arm64-v1-${{ runner.os }}-
@@ -45,17 +47,17 @@ jobs:
           set -o pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" 2>&1 | tee android-sdk.log
           echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
-          npm install --global @tauri-apps/cli@2.12.4
+          npm install --no-save --package-lock=false @tauri-apps/cli@2.12.4
       - name: Generate Android project
         run: |
           set -o pipefail
-          tauri icon ui/brand-mark.svg --output icons/android
-          tauri android init --ci --skip-targets-install 2>&1 | tee android-init.log
+          npx --no-install tauri icon ui/brand-mark.svg --output icons/android
+          npx --no-install tauri android init --ci --skip-targets-install 2>&1 | tee android-init.log
           python tools/prepare_android.py
       - name: Build installable ARM64 APK
         run: |
           set -o pipefail
-          tauri android build --debug --apk --target aarch64 --features app --ci 2>&1 | tee android-build.log
+          npx --no-install tauri android build --debug --apk --target aarch64 --features app --ci 2>&1 | tee android-build.log
       - name: Report bounded build failure
         if: failure()
         run: python tools/report_android_failure.py
@@ -65,3 +67,15 @@ jobs:
           path: gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 7
+      - uses: actions/cache/save@v4
+        if: always() && steps.android-cache.outputs.cache-hit != 'true' && steps.android-cache.outputs.cache-primary-key != ''
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            target/aarch64-linux-android
+            target/debug
+            ~/.android/debug.keystore
+          key: ${{ steps.android-cache.outputs.cache-primary-key }}

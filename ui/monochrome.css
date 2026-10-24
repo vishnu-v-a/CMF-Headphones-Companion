@@ -233,7 +233,7 @@ dialog { background: linear-gradient(145deg, #222222, #0c0c0c 70%); border-color
 /* Android reuses these screens; only desktop window controls and safe areas differ. */
 .android .window-actions { display: none; }
 .android .companion { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-.android input[type=number], .android input[type=text], .android input[type=search] { font-size: 16px; }
+.android .profile-field input { font-size: 16px; }
 .android .band-fields input { font-size: 12px; }
 .android .device-name strong { font-size: 19px; }
 .android .tabs button { letter-spacing: .6px; }

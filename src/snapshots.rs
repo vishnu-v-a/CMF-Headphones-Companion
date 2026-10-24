@@ -58,7 +58,7 @@ impl SnapshotStore {
 
     fn path(&self, address: &str, firmware: &str) -> Result<PathBuf, String> {
         let root = self.root.as_ref().ok_or(
-            "The backup folder is unavailable. Restart the desktop app before applying EQ.",
+            "The backup folder is unavailable. Restart the app before applying EQ.",
         )?;
         let address_key = address.replace(':', "").to_ascii_uppercase();
         if address_key.len() != 12 || !address_key.bytes().all(|b| b.is_ascii_hexdigit()) {
