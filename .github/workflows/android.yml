@@ -56,9 +56,11 @@ jobs:
           set -o pipefail
           npx --no-install tauri icon ui/brand-mark.svg --output icons/android
           npx --no-install tauri android init --ci --skip-targets-install 2>&1 | tee android-init.log
-          python tools/prepare_android.py
+          python tools/prepare_android.py 2>&1 | tee -a android-init.log
           # Restored Rust build outputs must regenerate Kotlin files in this fresh project.
-          find "$HOME/.cargo/registry/src" -name build.rs \( -path '*/wry-*/*' -o -path '*/tao-*/*' -o -path '*/tauri-*/*' \) -exec touch {} +
+          if [ -d "$HOME/.cargo/registry/src" ]; then
+            find "$HOME/.cargo/registry/src" -name build.rs \( -path '*/wry-*/*' -o -path '*/tao-*/*' -o -path '*/tauri-*/*' \) -exec touch {} +
+          fi
       - name: Build installable ARM64 APK
         run: |
           set -o pipefail
