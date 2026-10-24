@@ -2,6 +2,7 @@
   "identifier": "main-window",
   "description": "Local EQ editor, native Bluetooth control, and backend-managed EQ recovery files. No shell, filesystem, or network plugins.",
   "windows": ["main"],
+  "platforms": ["windows"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

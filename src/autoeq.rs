@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "desktop", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "app", derive(serde::Serialize, serde::Deserialize))]
 pub struct Filter {
     pub id: u32,
     pub kind: String,
@@ -11,7 +11,7 @@ pub struct Filter {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "desktop", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "app", derive(serde::Serialize, serde::Deserialize))]
 pub struct Profile {
     pub name: String,
     pub preamp: f32,

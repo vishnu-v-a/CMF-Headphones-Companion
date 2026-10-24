@@ -1,5 +1,13 @@
 # CMF Headphone Pro EQ investigation
 
+## Android
+
+The Android build keeps the same Rust logic and monochrome interface. Download
+the `cmf-eq-android-arm64` APK artifact from **Build Android app**, pair the
+headphones in Android settings and allow Nearby devices. A small native
+adapter handles Android Bluetooth and file pickers. See [Android setup and
+build details](docs/ANDROID.md), including trial signing and local data.
+
 ## Saved profile library
 
 Use **Equalizer → Save profile** to keep multiple named tunings on this

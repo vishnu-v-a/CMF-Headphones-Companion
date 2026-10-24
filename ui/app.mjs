@@ -4,6 +4,8 @@ import { createProfileLibrary } from './profile-library.mjs';
 
 const $ = selector => document.querySelector(selector);
 const invoke = window.__TAURI__?.core?.invoke;
+const isAndroid = /Android/i.test(navigator.userAgent);
+document.documentElement.classList.toggle('android', isAndroid);
 const startingProfile = tuningProfile(presets.flat, 'Flat');
 const draftKey = 'cmf-eq-draft-v1';
 const bassCondition = 'Bass starting point · Custom EQ, ANC High, bass slider minimum, spatial off.';
@@ -48,7 +50,7 @@ function renderConnection() {
   const battery = connection.battery;
   $('#battery-level').textContent = battery ? `${battery.percent}%${battery.charging ? ' ⚡' : ''}` : '—';
   $('#battery').setAttribute('aria-label', battery ? `Battery ${battery.percent} percent${battery.charging ? ', charging' : ''}` : 'Battery unavailable');
-  $('#connection-info').textContent = connected ? `Firmware ${connection.firmware} · ${connection.device.address}` : 'Pair in Windows Bluetooth settings first.';
+  $('#connection-info').textContent = connected ? `Firmware ${connection.firmware} · ${connection.device.address}` : `Pair in ${isAndroid ? 'Android' : 'Windows'} Bluetooth settings first.`;
   $('#connection-info').title = connected ? `Protocol ${connection.protocol_version} · ${connection.device.address} · Firmware ${connection.firmware}` : '';
   $('#paired-device').disabled = !invoke || connected || connectionBusy;
   $('#scan-devices').disabled = !invoke || connected || connectionBusy;
@@ -166,7 +168,7 @@ async function scanDevices() {
       $('#paired-device').append(option);
     }
     if (devices.some(device => device.address === selection)) $('#paired-device').value = selection;
-    message(devices.length ? 'Choose the headphone name and Bluetooth address, then Connect.' : 'No paired devices found. Pair the headphones in Windows settings, then Refresh.');
+    message(devices.length ? 'Choose the headphone name and Bluetooth address, then Connect.' : 'No paired devices found. Pair the headphones in Bluetooth settings, then Refresh.');
   } catch (error) { message(String(error.message ?? error), true); }
   finally { renderConnection(); }
 }
@@ -266,7 +268,7 @@ for (const [index, tab] of tabs.entries()) {
   };
 }
 
-const appWindow = window.__TAURI__?.window?.getCurrentWindow();
+const appWindow = isAndroid ? null : window.__TAURI__?.window?.getCurrentWindow();
 for (const [id, action] of [['minimize', 'minimize'], ['close', 'close']]) {
   $(`#${id}`).disabled = !appWindow;
   $(`#${id}`).onclick = async () => {
@@ -286,7 +288,19 @@ $('#pin').onclick = async () => {
   } catch (error) { message(String(error.message ?? error), true); }
   finally { $('#pin').disabled = false; }
 };
-$('#choose-profile').onclick = () => $('#profile-file').click();
+$('#choose-profile').onclick = async () => {
+  if (!isAndroid || !invoke) { $('#profile-file').click(); return; }
+  const version = ++importVersion;
+  pending = null; $('#import-preview').hidden = true;
+  try {
+    const profile = await invoke('import_profile_file');
+    if (!profile || version !== importVersion) return;
+    pending = profile; pendingCondition = 'Imported draft · match ANC to the profile’s measurement condition.';
+    $('#preview-label').textContent = 'IMPORT PREVIEW'; $('#import-name').textContent = profile.name;
+    $('#import-summary').textContent = `${profile.filters.length}/8 bands · ${profile.preamp} dB preamp. Confirm to replace your draft.`;
+    $('#import-preview').hidden = false;
+  } catch (error) { if (version === importVersion) message(String(error.message ?? error), true); }
+};
 $('#dismiss-notification').onclick = () => { $('#notification').hidden = true; };
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
@@ -566,13 +580,18 @@ $('#auto-headroom').onclick = () => {
 };
 $('#save-draft').onclick = () => profileLibrary.openSave();
 $('#save-profile-from-editor').onclick = () => profileLibrary.openSave();
-$('#export-draft').onclick = () => {
+$('#export-draft').onclick = async () => {
   try {
     const profile = draft();
+    const filename = `${profile.name.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 80) || 'cmf-profile'}.txt`;
+    if (isAndroid && invoke) {
+      const saved = await invoke('export_profile_file', {name: filename, text: exportProfile(profile)});
+      message(saved ? 'Editor draft exported.' : 'Export cancelled.'); return;
+    }
     const url = URL.createObjectURL(new Blob([exportProfile(profile)], {type:'text/plain;charset=utf-8'}));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${profile.name.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 80) || 'cmf-profile'}.txt`;
+    link.download = filename;
     document.body.append(link);
     link.click();
     link.remove();

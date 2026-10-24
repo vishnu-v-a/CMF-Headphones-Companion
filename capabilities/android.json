@@ -1,0 +1,7 @@
+{
+  "identifier": "android-main",
+  "description": "Shared local EQ editor and Rust controller on Android.",
+  "windows": ["main"],
+  "platforms": ["android"],
+  "permissions": ["core:default"]
+}

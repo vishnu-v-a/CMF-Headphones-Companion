@@ -5,7 +5,7 @@ use crate::snapshots::{GainUndoInfo, SnapshotInfo, SnapshotStore};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PairedDevice {
     pub name: String,
     pub address: String,
@@ -69,7 +69,7 @@ impl Controller {
             .into_iter()
             .find(|device| device.address.eq_ignore_ascii_case(address))
             .ok_or(
-                "Select a device paired in Windows Bluetooth settings, then refresh the list.",
+                "Select a device paired in Bluetooth settings, then refresh the list.",
             )?;
         let mut session = Session {
             socket: platform::Socket::connect(&device.address)?,
@@ -833,7 +833,10 @@ mod platform {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "android")]
+use crate::android_transport as platform;
+
+#[cfg(not(any(windows, target_os = "android")))]
 mod platform {
     use super::*;
     pub fn paired_devices() -> Result<Vec<PairedDevice>, String> {

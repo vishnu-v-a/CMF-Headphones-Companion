@@ -230,6 +230,16 @@ dialog { background: linear-gradient(145deg, #222222, #0c0c0c 70%); border-color
 #remove-profile { margin-right: auto; text-decoration: underline; text-underline-offset: 3px; }
 #profile-dialog-error { overflow-wrap: anywhere; }
 
+/* Android reuses these screens; only desktop window controls and safe areas differ. */
+.android .window-actions { display: none; }
+.android .companion { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.android input[type=number], .android input[type=text], .android input[type=search] { font-size: 16px; }
+.android .band-fields input { font-size: 12px; }
+.android .device-name strong { font-size: 19px; }
+.android .tabs button { letter-spacing: .6px; }
+.android .eq-actions button { padding-left: 7px; padding-right: 7px; }
+.android .band-button { padding-left: 1px; padding-right: 1px; }
+
 @media (prefers-reduced-motion: reduce) {
     button { transition: none; }
 }

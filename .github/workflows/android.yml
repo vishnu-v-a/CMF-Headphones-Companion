@@ -1,0 +1,60 @@
+name: Build Android app
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            target/aarch64-linux-android
+            ~/.android/debug.keystore
+          key: android-arm64-v1-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: android-arm64-v1-${{ runner.os }}-
+      - name: Install Android SDK and Tauri CLI
+        run: |
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          npm install --global @tauri-apps/cli@2.12.4
+      - name: Generate Android project
+        run: |
+          tauri android init --ci --skip-targets-install
+          python tools/prepare_android.py
+      - name: Build installable ARM64 APK
+        run: tauri android build --debug --apk --target aarch64 --features app --ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cmf-eq-android-arm64
+          path: gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 7

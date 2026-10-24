@@ -7,6 +7,7 @@ edition = "2021"
 [lib]
 name = "cmf_eq"
 path = "src/lib.rs"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
 name = "cmf-eq"
@@ -15,7 +16,8 @@ required-features = ["desktop"]
 
 [features]
 default = []
-desktop = ["dep:tauri", "dep:serde", "dep:serde_json", "dep:tauri-build", "tauri/custom-protocol"]
+desktop = ["app"]
+app = ["dep:tauri", "dep:serde", "dep:serde_json", "dep:tauri-build", "tauri/custom-protocol"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }

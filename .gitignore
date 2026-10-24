@@ -1,5 +1,8 @@
 # Rust build output; retain Cargo.lock for the planned application.
 /target/
+/gen/
+/node_modules/
+/.gradle/
 
 # Local investigation material and downloaded tools.
 /artifacts/

@@ -1,0 +1,8 @@
+{
+  "app": {
+    "windows": [{"label": "main", "title": "CMF · EQ", "backgroundColor": "#080808"}]
+  },
+  "bundle": {
+    "android": {"minSdkVersion": 24, "versionCode": 100}
+  }
+}
