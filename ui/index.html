@@ -64,15 +64,22 @@
       <div class="eq-footer">
         <div class="headroom-line"><span id="headroom-status" role="status"></span><button id="auto-headroom">Auto headroom</button></div>
         <button id="device-eq-status" class="small muted" disabled>Connect to read the headphone EQ.</button>
-        <div class="eq-actions"><button id="save-draft">Save draft</button><button id="export-draft">Export .txt</button><button id="apply-eq" class="primary" disabled>Apply to headphones</button></div>
+        <div class="eq-actions"><button id="save-draft">Save profile</button><button id="export-draft">Export .txt</button><button id="apply-eq" class="primary" disabled>Apply to headphones</button></div>
       </div>
     </section>
     <section id="profiles" class="view profiles-view" role="tabpanel" aria-labelledby="tab-profiles" tabindex="0" hidden>
-      <div class="view-heading"><div><span class="eyebrow">YOUR LIBRARY</span><h1>Profiles</h1></div><span class="badge">AutoEQ</span></div>
-      <div class="import-card"><span class="import-symbol" aria-hidden="true">↧</span><h2>Import AutoEQ</h2><p class="muted">Equalizer APO text · up to 8 active filters</p><button id="choose-profile" class="primary">Import .txt file <span>↗</span></button><input id="profile-file" type="file" accept=".txt,text/plain" hidden></div>
+      <div class="view-heading"><div><span class="eyebrow">YOUR LIBRARY</span><h1>Profiles</h1></div><button id="save-profile-from-editor" class="primary">Save current</button></div>
+      <div class="import-card compact-import"><div><strong>Import AutoEQ</strong><p class="small muted">Equalizer APO · up to 8 bands</p></div><button id="choose-profile">Import .txt ↗</button><input id="profile-file" type="file" accept=".txt,text/plain" hidden></div>
       <div id="import-preview" class="import-preview" hidden><span id="preview-label" class="eyebrow">IMPORT PREVIEW</span><h2 id="import-name"></h2><p id="import-summary"></p><div class="preview-actions"><button id="cancel-import">Cancel</button><button id="use-import" class="primary">Use in editor</button></div></div>
-      <div class="library-label"><span class="eyebrow">REFERENCE PROFILE</span></div>
-      <button id="reference" class="profile-item"><span class="profile-mark" aria-hidden="true">≋</span><span class="profile-description"><strong>Harman 2018 target</strong><span class="muted small">7 bands · −6.1 dB · ANC maximum</span></span><span aria-hidden="true">↗</span></button>
+      <section class="saved-library" aria-label="Saved profiles">
+        <div class="library-toolbar"><span class="eyebrow">SAVED <span id="library-count">0</span></span><button id="undo-remove-profile" hidden>Undo remove</button><button id="refresh-profiles" aria-label="Refresh saved profiles">Refresh</button></div>
+        <label for="profile-search" class="visually-hidden">Search saved profiles</label><input id="profile-search" type="search" maxlength="80" placeholder="Find a profile…">
+        <p id="library-status" class="small muted" role="status">Loading saved profiles…</p>
+        <div id="saved-profile-list"></div>
+        <div class="library-pager"><button id="profiles-previous" aria-label="Previous profiles">←</button><span id="profiles-page" class="small muted">0 profiles</span><button id="profiles-next" aria-label="Next profiles">→</button></div>
+      </section>
+      <div class="library-label reference-label"><span class="eyebrow">REFERENCE PROFILE</span></div>
+      <button id="reference" class="profile-item"><span class="profile-mark" aria-hidden="true">≋</span><span class="profile-description"><strong>Harman 2018 target</strong><span class="muted small">Reference · 7 bands · −6.1 dB · ANC maximum</span></span><span aria-hidden="true">↗</span></button>
       <div class="view-bottom"><p id="snapshot-status" class="small muted">An original EQ backup is saved before your first Apply.</p><div class="recovery-actions"><button id="read-device" disabled>Read device</button><button id="use-device-eq" disabled>Review device EQ</button><button id="restore-eq" disabled>Restore original</button></div></div>
     </section>
   </main>
@@ -89,6 +96,17 @@
       <label class="custom-mode-check"><input id="custom-mode-confirmed" type="checkbox" required><span id="custom-mode-label">Custom EQ is selected in Nothing X.</span></label>
       <p id="eq-confirm-result" class="small" role="status" aria-live="polite"></p>
       <div class="preview-actions"><button id="cancel-eq" type="button">Cancel</button><button id="confirm-eq" type="submit" class="primary">Apply and verify</button></div>
+    </form>
+  </dialog>
+  <dialog id="profile-dialog" aria-labelledby="profile-dialog-title">
+    <form id="profile-form">
+      <span class="eyebrow">LOCAL PROFILE LIBRARY</span><h2 id="profile-dialog-title">Save profile</h2>
+      <p id="profile-dialog-summary" class="small muted"></p>
+      <label class="profile-field">Name<input id="saved-profile-name" type="text" maxlength="80" required autocomplete="off"></label>
+      <label class="profile-field">Listening notes <span class="muted small">Optional · reminders only</span><input id="saved-profile-notes" type="text" maxlength="512" autocomplete="off" placeholder="e.g. ANC High, spatial off"></label>
+      <p class="small muted">Saves the editor tuning on this computer. Open a card, then Apply to listen.</p>
+      <p id="profile-dialog-error" class="small invalid-draft" role="alert" hidden></p>
+      <div class="profile-dialog-actions"><button id="remove-profile" type="button" hidden>Remove</button><button id="cancel-profile" type="button">Cancel</button><button id="update-profile" type="button" hidden>Update existing</button><button id="save-profile" type="submit" class="primary">Save new</button></div>
     </form>
   </dialog>
 </div>

@@ -190,6 +190,46 @@ dialog { background: linear-gradient(145deg, #222222, #0c0c0c 70%); border-color
 .notification, .notification:not(.is-error) { background: linear-gradient(130deg, #292929, #141414); color: #f4f4f4; box-shadow: inset 0 0 0 1px #ffffff38, 0 8px 28px #00000085; }
 .notification.is-error { box-shadow: inset 3px 0 0 #ffffff, inset 0 0 0 1px #ffffff65, 0 8px 28px #00000085; }
 
+/* Two library cards per page keep recovery controls inside the compact window. */
+.profiles-view { gap: 6px; }
+.profiles-view .compact-import { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; gap: 8px; text-align: left; border-radius: 16px; }
+.compact-import > div { min-width: 0; }
+.compact-import strong { font-size: 11px; }
+.compact-import button { min-width: 0; padding: 7px 10px; font-size: 10px; flex: none; }
+.saved-library { flex: 1; min-height: 182px; display: flex; flex-direction: column; gap: 4px; }
+.library-toolbar { display: flex; align-items: center; gap: 6px; min-height: 22px; }
+.library-toolbar .eyebrow { flex: 1; }
+.library-toolbar button, .library-pager button { padding: 3px 8px; font-size: 10px; min-height: 22px; }
+#profile-search, .profile-field input { min-width: 0; width: 100%; border: 1px solid #ffffff30; background: #111111; border-radius: 10px; padding: 6px 10px; }
+#profile-search { height: 26px; font-size: 11px; }
+#library-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+#saved-profile-list { display: grid; gap: 4px; }
+.saved-profile-card { display: flex; align-items: stretch; height: 48px; min-width: 0; border-radius: 16px; background: var(--panel-gloss); box-shadow: var(--panel-shadow); }
+.saved-profile-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; text-align: left; background: transparent; box-shadow: none; padding: 5px 9px; border-radius: 16px 6px 6px 16px; }
+.saved-profile-mark { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; color: #080808; background: var(--white-gloss); font-size: 20px; }
+.saved-profile-card .profile-description { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: 1px 7px; }
+.saved-profile-card .profile-description strong { grid-column: 1 / -1; }
+.saved-profile-card .profile-description > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-profile-card .profile-notes { font-weight: 400; opacity: .85; }
+.manage-profile { width: 34px; flex: none; padding: 0; background: transparent; box-shadow: none; border-radius: 6px 16px 16px 6px; font-size: 18px; }
+.library-pager { display: flex; justify-content: center; align-items: center; gap: 10px; }
+.profiles-view .reference-label { display: none; }
+.profiles-view #reference { padding: 8px 12px; height: 50px; }
+.profiles-view #reference .profile-mark { width: 30px; height: 30px; flex: none; font-size: 20px; }
+.profiles-view #reference .profile-description { gap: 2px; }
+.profiles-view #reference .profile-description > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profiles-view .view-bottom { gap: 5px; }
+.profiles-view .recovery-actions { gap: 4px; }
+.profiles-view .recovery-actions button { padding: 7px 5px; font-size: 10px; }
+.profiles-view:has(.import-preview:not([hidden])) .saved-library,
+.profiles-view:has(.import-preview:not([hidden])) #reference { display: none; }
+.profile-field { display: grid; gap: 5px; font-size: 11px; }
+.profile-field input { font-size: 12px; user-select: text; }
+.profile-dialog-actions { display: flex; justify-content: flex-end; gap: 5px; flex-wrap: wrap; }
+.profile-dialog-actions button { padding: 8px 10px; font-size: 11px; }
+#remove-profile { margin-right: auto; text-decoration: underline; text-underline-offset: 3px; }
+#profile-dialog-error { overflow-wrap: anywhere; }
+
 @media (prefers-reduced-motion: reduce) {
     button { transition: none; }
 }

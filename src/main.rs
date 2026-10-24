@@ -2,11 +2,41 @@
 
 use cmf_eq::autoeq::{self, Profile};
 use cmf_eq::bluetooth::{self, ConnectionStatus, Controller, PairedDevice};
+use cmf_eq::profile_library::{LibraryListing, ProfileLibrary, SaveRequest, SavedProfile};
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
 #[derive(Default)]
 struct BluetoothState(Arc<Mutex<Controller>>);
+struct LibraryState(Arc<Mutex<ProfileLibrary>>);
+
+#[tauri::command]
+async fn list_library_profiles(state: tauri::State<'_, LibraryState>) -> Result<LibraryListing, String> {
+    let library = state.inner().0.clone();
+    tauri::async_runtime::spawn_blocking(move || library.lock().map_err(|_| "Profile library unavailable.")?.list())
+        .await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn save_library_profile(request: SaveRequest, state: tauri::State<'_, LibraryState>) -> Result<SavedProfile, String> {
+    let library = state.inner().0.clone();
+    tauri::async_runtime::spawn_blocking(move || library.lock().map_err(|_| "Profile library unavailable.")?.save(request))
+        .await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn delete_library_profile(id: String, revision: String, state: tauri::State<'_, LibraryState>) -> Result<(), String> {
+    let library = state.inner().0.clone();
+    tauri::async_runtime::spawn_blocking(move || library.lock().map_err(|_| "Profile library unavailable.")?.remove(&id, &revision))
+        .await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn restore_library_profile(id: String, revision: String, state: tauri::State<'_, LibraryState>) -> Result<SavedProfile, String> {
+    let library = state.inner().0.clone();
+    tauri::async_runtime::spawn_blocking(move || library.lock().map_err(|_| "Profile library unavailable.")?.restore(&id, &revision))
+        .await.map_err(|e| e.to_string())?
+}
 
 #[tauri::command]
 async fn list_paired_devices() -> Result<Vec<PairedDevice>, String> {
@@ -202,7 +232,9 @@ fn validate_profile(profile: Profile) -> Result<Profile, String> {
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            let root = app.path().app_data_dir()?.join("eq-backups");
+            let data = app.path().app_data_dir()?;
+            let root = data.join("eq-backups");
+            app.manage(LibraryState(Arc::new(Mutex::new(ProfileLibrary::new(data.join("profiles"))))));
             app.manage(BluetoothState(Arc::new(Mutex::new(
                 Controller::with_snapshot_directory(root),
             ))));
@@ -210,6 +242,10 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             import_autoeq,
+            list_library_profiles,
+            save_library_profile,
+            delete_library_profile,
+            restore_library_profile,
             reference_profile,
             validate_profile,
             list_paired_devices,

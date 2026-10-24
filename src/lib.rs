@@ -4,3 +4,5 @@ pub mod protocol;
 pub mod bluetooth;
 #[cfg(feature = "desktop")]
 pub mod snapshots;
+#[cfg(feature = "desktop")]
+pub mod profile_library;

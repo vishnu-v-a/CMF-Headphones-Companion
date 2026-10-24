@@ -1,5 +1,12 @@
 # CMF Headphone Pro EQ investigation
 
+## Saved profile library
+
+Use **Equalizer → Save profile** to keep multiple named tunings on this
+computer. Open their cards in **Profiles**, then Apply to listen. Search,
+explicit Update existing, rename and Remove with Undo are available; the
+original recovery backup stays separate. See [profile library details](docs/PROFILE-LIBRARY.md).
+
 The interface now has a Nothing-inspired black-and-white glossy finish,
 with local dot-matrix display typography and monochrome controls. See
 [the design notes](docs/MONOCHROME-DESIGN.md). This visual update does not

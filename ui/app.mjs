@@ -1,5 +1,6 @@
 import { responseDb } from './response.mjs';
 import { presets, tuningProfile, headroom, exportProfile } from './tuning.mjs';
+import { createProfileLibrary } from './profile-library.mjs';
 
 const $ = selector => document.querySelector(selector);
 const invoke = window.__TAURI__?.core?.invoke;
@@ -14,6 +15,7 @@ let selectedBand = 0;
 let connection = { connected: false }, connectionBusy = false, pollTimer;
 let ancExpanded = false;
 let gainConsentKey = null, spatialConsentKey = null;
+let profileLibrary = null;
 const deviceKey = () => connection.connected ? `${connection.device.address}|${connection.firmware}` : null;
 const cloneProfile = profile => JSON.parse(JSON.stringify(profile));
 const spatialNames = {0:'Off',2:'Concert',3:'Cinema'};
@@ -478,7 +480,8 @@ function renderEqState() {
     $('#headroom-status').classList.toggle('invalid-draft', !valid);
     $('#headroom-status').title = `48 kHz mathematical response estimate, not measured loudness or a guarantee against transient clipping. Suggested preamp: ${estimate.recommended} dB.`;
     $('#auto-headroom').disabled = false;
-    $('#save-draft').disabled = false;
+    $('#save-draft').disabled = !invoke || Boolean(profileLibrary?.busy);
+    $('#save-profile-from-editor').disabled = $('#save-draft').disabled;
     $('#export-draft').disabled = false;
   } catch (error) {
     $('#headroom-status').textContent = error.message;
@@ -486,6 +489,7 @@ function renderEqState() {
     $('#headroom-status').classList.add('invalid-draft');
     $('#auto-headroom').disabled = true;
     $('#save-draft').disabled = true;
+    $('#save-profile-from-editor').disabled = true;
     $('#export-draft').disabled = true;
   }
   const canWrite = Boolean(invoke && connection.connected && !connectionBusy && connection.firmware && !connection.snapshot_error);
@@ -560,12 +564,8 @@ $('#auto-headroom').onclick = () => {
   try { $('#preamp').value = headroom(draft()).recommended; update(); }
   catch (error) { message(error.message, true); }
 };
-$('#save-draft').onclick = () => {
-  try {
-    localStorage.setItem(draftKey, JSON.stringify({ version: 1, ...captureDraft() }));
-    message('Draft saved on this computer. Headphone settings are unchanged.');
-  } catch (error) { message(`Could not save draft: ${error.message}`, true); }
-};
+$('#save-draft').onclick = () => profileLibrary.openSave();
+$('#save-profile-from-editor').onclick = () => profileLibrary.openSave();
 $('#export-draft').onclick = () => {
   try {
     const profile = draft();
@@ -776,7 +776,23 @@ $('#profile-file').onchange=async event=>{
 $('#use-import').onclick=()=>{if(pending){useProfile(pending,pendingCondition);pending=null;$('#import-preview').hidden=true;showTab('eq', true);}};
 $('#cancel-import').onclick=()=>{++importVersion;pending=null;$('#import-preview').hidden=true;message('Import cancelled. Your draft is unchanged.');};
 $('#reference').onclick=async()=>{try{if(!invoke)throw Error('Load reference needs the desktop app. This preview opens with a Punch draft.');const profile=await invoke('reference_profile');++importVersion;pending=null;$('#import-preview').hidden=true;useProfile(profile);$('#condition').textContent='Reference tuning · ANC maximum.';showTab('eq', true);}catch(error){message(String(error.message??error),true);}};
+profileLibrary = createProfileLibrary({
+  invoke, capture: captureDraft, message, onBusy: renderEqState,
+  openDraft(profile, condition, tone) {
+    try { previousDraft = captureDraft(); } catch { previousDraft = null; }
+    useProfile(cloneProfile(profile), condition, tone);
+    $('#undo-preset').disabled = !previousDraft;
+    showTab('eq', true);
+  },
+  savedDraft(entry) {
+    name = entry.profile.name; update(); syncToneControls();
+    $('#condition').textContent = entry.condition;
+    try { localStorage.setItem(draftKey, JSON.stringify({ version: 1, profile: entry.profile, condition: entry.condition, tone: entry.tone })); }
+    catch { /* The named file is saved even if the single working-draft cache is unavailable. */ }
+  },
+});
 initializeDraft();
+profileLibrary.refresh();
 new ResizeObserver(() => {
   try { draw(draft()); }
   catch { $('#response').replaceChildren(); }
