@@ -3,13 +3,13 @@ import { presets, tuningProfile, headroom, exportProfile } from './tuning.mjs';
 
 const $ = selector => document.querySelector(selector);
 const invoke = window.__TAURI__?.core?.invoke;
-const startingProfile = tuningProfile(presets.punch, 'Punch');
+const startingProfile = tuningProfile(presets.flat, 'Flat');
 const draftKey = 'cmf-eq-draft-v1';
 const bassCondition = 'Bass starting point · Custom EQ, ANC High, bass slider minimum, spatial off.';
 let name = startingProfile.name, skipped = [], pending = null, importVersion = 0;
 let rows = startingProfile.filters.map(filter => ({...filter, enabled: true}));
 while (rows.length < 8) rows.push({id:rows.length+1,kind:'PK',frequency:1000,gain:0,q:1,enabled:false});
-let toneValues = {...presets.punch}, previousDraft = null, writeReview = null, notificationTimer;
+let toneValues = {...presets.flat}, previousDraft = null, writeReview = null, notificationTimer;
 let selectedBand = 0;
 let connection = { connected: false }, connectionBusy = false, pollTimer;
 let ancExpanded = false;
@@ -436,7 +436,9 @@ function syncToneControls() {
     $(`#tone-${key}-value`).value = toneValues ? `${slider.value}%` : '—';
   }
   $('#tone-help').textContent = toneValues
-    ? 'Relative bass tuning · automatic headroom may lower overall level.'
+    ? Object.values(toneValues).filter(value => typeof value === 'number').every(value => value === 0)
+      ? 'Flat draft · no additional correction or preamp attenuation.'
+      : 'Relative bass tuning · automatic headroom may lower overall level.'
     : 'Advanced/imported draft · choose a preset to use sound controls.';
   for (const button of document.querySelectorAll('[data-preset]')) {
     button.setAttribute('aria-pressed', String(Boolean(toneValues && name === presets[button.dataset.preset].name)));
@@ -447,8 +449,8 @@ function renderEqState() {
   let valid = false;
   try {
     const profile = draft(), estimate = headroom(profile);
-    valid = estimate.outputPeak <= 0;
-    $('#headroom-status').textContent = valid
+    valid = estimate.outputPeak <= 0 && profile.preamp <= 0;
+    $('#headroom-status').textContent = profile.preamp > 0 ? 'Positive preamp: use Controls → Bluetooth gain trial' : valid
       ? `Estimated peak ${estimate.outputPeak.toFixed(1)} dB · draft`
       : `Needs ${estimate.outputPeak.toFixed(1)} dB more headroom`;
     $('#headroom-status').classList.toggle('invalid-draft', !valid);
@@ -465,6 +467,18 @@ function renderEqState() {
     $('#export-draft').disabled = true;
   }
   const canWrite = Boolean(invoke && connection.connected && !connectionBusy && connection.firmware && !connection.snapshot_error);
+  const flatDevice = connection.eq?.filters.every(filter => filter.gain === 0)
+    && connection.eq.preamp >= 0 && connection.eq.preamp <= 3;
+  const currentGain = flatDevice ? connection.eq.preamp : null;
+  $('#gain-level').disabled = !canWrite || !flatDevice;
+  for (const option of $('#gain-level').options) option.disabled = !flatDevice || Number(option.value) > currentGain + 1;
+  if ($('#gain-level').selectedOptions[0]?.disabled && flatDevice) $('#gain-level').value = String(Math.min(3, Math.floor(currentGain) + 1));
+  $('#review-gain').disabled = !canWrite || !flatDevice;
+  $('#reset-gain').disabled = !canWrite || !connection.eq;
+  $('#gain-status').textContent = !connection.connected ? 'Experimental' : currentGain === null ? 'Apply Flat 0 dB first' : `Stored ${currentGain > 0 ? '+' : ''}${currentGain} dB`;
+  $('#gain-help').textContent = !invoke ? 'Desktop app required. No gain is applied in this preview.'
+    : !flatDevice ? 'Flat 0 dB replaces the current EQ. Then try +1 dB. Stored gain is not a loudness measurement.'
+    : 'May clip or have no effect. One step at a time; use Flat 0 dB to reset.';
   $('#apply-eq').disabled = !canWrite || !valid || !connection.eq;
   $('#apply-eq').title = !invoke ? 'Open the desktop app to apply EQ.' : !connection.connected ? 'Connect your headphones first.' : !valid ? 'Fix the draft or use Auto headroom.' : connection.snapshot_error || 'Review the selected device and EQ before applying.';
   $('#restore-eq').disabled = !canWrite || !connection.snapshot;
@@ -489,7 +503,7 @@ for (const button of document.querySelectorAll('[data-preset]')) {
   button.onclick = () => {
     try { previousDraft = captureDraft(); } catch { /* An invalid draft is never saved as an undo target. */ }
     const preset = presets[button.dataset.preset];
-    useProfile(tuningProfile(preset, preset.name), bassCondition, preset);
+    useProfile(tuningProfile(preset, preset.name), preset === presets.flat ? 'Flat custom EQ · 0 dB preamp; no additional correction.' : bassCondition, preset);
     $('#tone-panel').hidden = false;
     $('#toggle-tone').setAttribute('aria-expanded', 'true');
     $('#undo-preset').disabled = !previousDraft;
@@ -541,7 +555,7 @@ $('#export-draft').onclick = () => {
 };
 
 function initializeDraft() {
-  useProfile(startingProfile, bassCondition, presets.punch);
+  useProfile(startingProfile, 'Flat custom EQ · 0 dB preamp; no additional correction.', presets.flat);
   try {
     const text = localStorage.getItem(draftKey);
     if (!text) return;
@@ -574,7 +588,7 @@ function initializeDraft() {
     }
     useProfile(profile, typeof saved.condition === 'string' ? saved.condition : 'Saved editor draft.', tone);
     showTab('eq');
-  } catch (error) { message(`Saved draft could not be loaded. Punch draft opened instead. ${error.message}`, true); }
+  } catch (error) { message(`Saved draft could not be loaded. Flat draft opened instead. ${error.message}`, true); }
 }
 
 function appendProfileRows(profile, label = '') {
@@ -596,7 +610,7 @@ function appendProfileRows(profile, label = '') {
   }
 }
 
-async function reviewEq(action) {
+async function reviewEq(action, gainDb = null) {
   if (!invoke || connectionBusy || !connection.connected) return;
   clearTimeout(pollTimer);
   connectionBusy = true;
@@ -604,9 +618,16 @@ async function reviewEq(action) {
   try {
     const target = { address: connection.device.address, firmware: connection.firmware };
     let profile = action === 'restore' ? await invoke('snapshot_profile') : action === 'apply' ? await invoke('validate_profile', {profile: draft()}) : null;
+    if (action === 'gain') {
+      if (![0,1,2,3].includes(gainDb)) throw Error('Choose a gain from 0 to +3 dB.');
+      profile = {name: gainDb === 0 ? 'Flat 0 dB' : `Bluetooth gain trial +${gainDb} dB`, preamp: gainDb,
+        filters: [{id:1,kind:'PK',frequency:980,gain:0,q:0.66}], disabled_filters: []};
+    }
+    if (action === 'apply' && profile.preamp > 0) throw Error('Use Controls → Bluetooth gain trial for positive preamp.');
     if (action === 'apply' && headroom(profile).outputPeak > 0) throw Error('Use Auto headroom before applying this draft.');
-    writeReview = {action, profile, ...target};
+    writeReview = {action, profile, gainDb, ...target};
     $('#eq-confirm-title').textContent = action === 'inspect' ? 'Headphone EQ readback' : action === 'restore' ? 'Restore your original EQ' : 'Review your EQ';
+    if (action === 'gain') $('#eq-confirm-title').textContent = gainDb === 0 ? 'Return to Flat 0 dB' : `Try Bluetooth gain +${gainDb} dB`;
     $('#eq-confirm-target').textContent = `${connection.device.name} · ${target.address} · firmware ${target.firmware}`;
     $('#eq-confirm-summary').textContent = profile ? `${profile.name} · ${profile.filters.length} bands · ${profile.preamp} dB preamp.` : connection.eq_write_note || 'Stored filter values. Audible preset activation is not detected.';
     $('#eq-confirm-bands').replaceChildren();
@@ -618,6 +639,12 @@ async function reviewEq(action) {
     $('#eq-confirm-backup').textContent = action === 'inspect' ? 'Readback shows stored values; it does not measure sound or prove that Custom mode is active.'
       : action === 'restore' ? 'Restores saved EQ values for this device and firmware. Preset selection, ANC, slider position and your draft are unchanged.'
       : connection.snapshot ? 'Your existing original EQ backup will be kept.' : 'The current headphone EQ will be read and saved before applying.';
+    if (action === 'gain') $('#eq-confirm-backup').textContent = 'Replaces the headphone custom EQ with a flat filter and the selected gain. Your original backup and editor draft are kept.';
+    $('#eq-confirm-gain-warning').hidden = action !== 'gain' || gainDb === 0;
+    $('#eq-confirm-gain-warning').textContent = action === 'gain' && gainDb > 0
+      ? 'Experimental positive digital gain. Can clip, trigger limiting, or produce no audible increase. This app adds no audio limiter. Lower playback volume before the trial. Gain may persist after disconnect; Flat 0 dB resets it.' : '';
+    $('#custom-mode-label').textContent = action === 'gain' && gainDb > 0
+      ? 'Custom EQ is selected in Nothing X. I understand this gain trial can distort and may persist.' : 'Custom EQ is selected in Nothing X.';
     $('.custom-mode-check').hidden = action === 'inspect';
     $('#custom-mode-confirmed').required = action !== 'inspect';
     $('#custom-mode-confirmed').checked = false;
@@ -631,6 +658,8 @@ async function reviewEq(action) {
 }
 
 $('#apply-eq').onclick = () => reviewEq('apply');
+$('#review-gain').onclick = () => reviewEq('gain', Number($('#gain-level').value));
+$('#reset-gain').onclick = () => reviewEq('gain', 0);
 $('#restore-eq').onclick = () => reviewEq('restore');
 $('#device-eq-status').onclick = () => reviewEq('inspect');
 $('#cancel-eq').onclick = () => { if (!connectionBusy) $('#eq-confirm').close(); };
@@ -649,9 +678,11 @@ $('#eq-confirm-form').onsubmit = async event => {
   try {
     const args = { address: review.address, firmware: review.firmware, customModeConfirmed: true };
     if (review.action === 'apply') args.profile = review.profile;
-    connection = await invoke(review.action === 'apply' ? 'apply_eq' : 'restore_eq', args);
+    if (review.action === 'gain') { args.gainDb = review.gainDb; args.gainTrialConfirmed = true; }
+    const command = review.action === 'gain' ? 'set_bluetooth_gain' : review.action === 'apply' ? 'apply_eq' : 'restore_eq';
+    connection = await invoke(command, args);
     $('#eq-confirm').close();
-    message(`EQ values verified by headphone readback.${connection.eq_write_note ? ` ${connection.eq_write_note}` : ''} Your editor draft is kept.`);
+    message(`${review.action === 'gain' && review.gainDb > 0 ? `Gain +${review.gainDb} dB matches stored readback; audible effect is unmeasured. Use Flat 0 dB if it distorts.` : 'EQ values verified by headphone readback.'}${connection.eq_write_note ? ` ${connection.eq_write_note}` : ''} Your editor draft is kept.`);
   } catch (error) {
     try { connection = await invoke('headphone_status'); }
     catch { connection = {connected:false}; }

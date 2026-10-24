@@ -1,5 +1,5 @@
 //! Windows Bluetooth Classic control connection with verified setting writes.
-use crate::autoeq::Profile;
+use crate::autoeq::{Filter, Profile};
 use crate::protocol::{self, Decoder};
 use crate::snapshots::{SnapshotInfo, SnapshotStore};
 use std::path::PathBuf;
@@ -185,11 +185,24 @@ impl Controller {
         firmware: &str,
         custom_mode_confirmed: bool,
     ) -> Result<ConnectionStatus, String> {
+        crate::autoeq::validate(&profile)?;
+        if profile.preamp > 0.0 {
+            return Err("Use the separate Bluetooth gain trial for positive preamp.".into());
+        }
+        self.prepare_eq_write(address, firmware, custom_mode_confirmed)?;
+        self.write_eq(profile)
+    }
+
+    fn prepare_eq_write(
+        &mut self,
+        address: &str,
+        firmware: &str,
+        custom_mode_confirmed: bool,
+    ) -> Result<Profile, String> {
         // Custom-preset activation is not a verified command on this model yet.
         if !custom_mode_confirmed {
             return Err("Select Custom EQ in Nothing X and confirm it before applying.".into());
         }
-        crate::autoeq::validate(&profile)?;
         self.confirm_write_target(address, firmware)?;
         let baseline = self
             .session
@@ -198,10 +211,45 @@ impl Controller {
             .request(0xc044, &[], 8)
             .and_then(|bytes| protocol::decode_eq(&bytes))?;
         self.status.eq = Some(baseline.clone());
+        self.update_eq_verification();
         let backup = self.snapshots.ensure(address, firmware, &baseline);
         self.update_snapshot_status();
         backup?; // A durable, validated recovery file is required before the write.
-        self.write_eq(profile)
+        Ok(baseline)
+    }
+
+    /// Experimental custom-EQ digital gain, not a master-volume or limiter unlock.
+    pub fn set_bluetooth_gain(
+        &mut self,
+        gain_db: f32,
+        address: &str,
+        firmware: &str,
+        custom_mode_confirmed: bool,
+        gain_trial_confirmed: bool,
+    ) -> Result<ConnectionStatus, String> {
+        if !gain_db.is_finite() || !(0.0..=3.0).contains(&gain_db) || gain_db.fract() != 0.0 {
+            return Err("Bluetooth gain trial supports only 0, +1, +2 or +3 dB.".into());
+        }
+        if gain_db > 0.0 && !gain_trial_confirmed {
+            return Err("Review and acknowledge the clipping risk before a positive gain trial.".into());
+        }
+        let baseline = self.prepare_eq_write(address, firmware, custom_mode_confirmed)?;
+        if gain_db > 0.0 {
+            if baseline.filters.iter().any(|filter| filter.gain != 0.0)
+                || !(0.0..=3.0).contains(&baseline.preamp)
+            {
+                return Err("Apply Flat 0 dB first, then review the gain trial again.".into());
+            }
+            if gain_db > baseline.preamp + 1.0 {
+                return Err("Increase by at most 1 dB per trial. Start with +1 dB.".into());
+            }
+        }
+        self.write_eq(Profile {
+            name: if gain_db == 0.0 { "Flat 0 dB".into() } else { format!("Bluetooth gain trial +{gain_db} dB") },
+            preamp: gain_db,
+            filters: vec![Filter { id: 1, kind: "PK".into(), frequency: 980.0, gain: 0.0, q: 0.66 }],
+            disabled_filters: vec![],
+        })
     }
 
     pub fn snapshot_profile(&self) -> Result<Profile, String> {

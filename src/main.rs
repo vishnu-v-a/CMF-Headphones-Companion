@@ -112,6 +112,26 @@ async fn apply_eq(
 }
 
 #[tauri::command]
+async fn set_bluetooth_gain(
+    gain_db: f32,
+    address: String,
+    firmware: String,
+    custom_mode_confirmed: bool,
+    gain_trial_confirmed: bool,
+    state: tauri::State<'_, BluetoothState>,
+) -> Result<ConnectionStatus, String> {
+    let controller = state.inner().0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        controller
+            .lock()
+            .map_err(|_| "Bluetooth state unavailable.")?
+            .set_bluetooth_gain(gain_db, &address, &firmware, custom_mode_confirmed, gain_trial_confirmed)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 async fn restore_eq(
     address: String,
     firmware: String,
@@ -184,6 +204,7 @@ fn main() {
             headphone_status,
             set_anc,
             apply_eq,
+            set_bluetooth_gain,
             restore_eq,
             snapshot_profile
         ])

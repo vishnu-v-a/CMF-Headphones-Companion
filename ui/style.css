@@ -198,6 +198,11 @@ input:invalid { border-color: var(--error); }
 .headroom-line > span { min-width: 0; }
 .headroom-line button { padding: 5px 8px; font-size: 10px; white-space: nowrap; }
 .invalid-draft { color: var(--error) !important; }
+.gain-actions { display: flex; gap: 6px; }
+.gain-actions select { min-width: 70px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--ink); padding: 5px; }
+.gain-actions button { flex: 1; padding: 7px 5px; font-size: 11px; }
+#gain-help { margin-top: 7px; font-size: 10px; }
+#gain-status { font-size: 10px; }
 #device-eq-status { padding: 0; background: transparent; text-align: left; border-radius: 0; font-size: 10px; line-height: 1.35; font-weight: 400; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #device-eq-status:disabled { opacity: 1; cursor: default; }
 .eq-actions { display: grid; grid-template-columns: 1fr 1fr 1.8fr; gap: 6px; }

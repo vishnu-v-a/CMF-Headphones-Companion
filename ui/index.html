@@ -27,12 +27,16 @@
       </section>
       <div class="control-card"><div class="card-heading"><span>Noise control</span><span id="noise-status" class="muted">Unavailable</span></div><div class="segments" role="group" aria-label="Noise control"><button data-noise="off" aria-pressed="false" disabled>Off</button><button data-noise="transparency" aria-pressed="false" disabled>Transparency</button><button data-noise="anc" aria-pressed="false" aria-controls="anc-levels" aria-expanded="false" disabled>ANC</button></div><div id="anc-levels" class="segments anc-levels" role="group" aria-label="ANC level" hidden><button data-anc="3" aria-pressed="false" disabled>Low</button><button data-anc="2" aria-pressed="false" disabled>Medium</button><button data-anc="1" aria-pressed="false" disabled>High</button><button data-anc="4" aria-pressed="false" disabled>Adaptive</button></div></div>
       <div class="control-card"><div class="card-heading"><span>Spatial audio</span><span id="spatial-status" class="muted">Unavailable</span></div><div class="segments spatial-modes" role="group" aria-label="Spatial audio"><button data-spatial="off" aria-pressed="false" disabled>Off</button><button data-spatial="cinema" aria-pressed="false" disabled>Cinema</button><button data-spatial="concert" aria-pressed="false" disabled>Concert</button></div><p class="small muted spatial-help">Mode control unavailable in this build.</p></div>
-      <div class="control-card"><div class="card-heading"><label for="volume">Windows volume</label><span class="muted">—%</span></div><input id="volume" type="range" min="0" max="100" value="0" disabled aria-label="Windows playback volume unavailable"><span class="muted small">Playback control unavailable in this build.</span></div>
+      <div class="control-card gain-card">
+        <div class="card-heading"><span>Bluetooth gain trial</span><span id="gain-status" class="muted">Experimental</span></div>
+        <div class="gain-actions"><select id="gain-level" aria-label="Experimental Bluetooth gain"><option value="1">+1 dB</option><option value="2">+2 dB</option><option value="3">+3 dB</option></select><button id="review-gain" disabled>Review gain</button><button id="reset-gain" disabled>Flat 0 dB</button></div>
+        <p id="gain-help" class="small muted">Flat EQ only. May clip or have no effect. Increase one step at a time.</p>
+      </div>
     </section>
     <section id="eq" class="view eq-view" role="tabpanel" aria-labelledby="tab-eq" tabindex="0" hidden>
-      <div class="view-heading"><div class="truncate"><span class="eyebrow">YOUR SOUND · EDITOR DRAFT</span><h1 id="profile-name">Punch</h1></div><span id="band-count" class="badge">4 / 8</span></div>
+      <div class="view-heading"><div class="truncate"><span class="eyebrow">YOUR SOUND · EDITOR DRAFT</span><h1 id="profile-name">Flat</h1></div><span id="band-count" class="badge">4 / 8</span></div>
       <div class="response-card"><svg id="response" viewBox="0 0 920 240" role="img" aria-label="Requested EQ response including preamp"></svg><div class="graph-caption"><span><i></i> Combined response</span><div class="preamp"><label for="preamp">Preamp</label><div class="number-unit"><input id="preamp" type="number" step="any" value="-6.1" required aria-label="Preamp in decibels"><span>dB</span></div></div></div></div>
-      <div class="sound-heading"><div class="preset-buttons" role="group" aria-label="Sound starting points"><button data-preset="punch">Punch</button><button data-preset="deep">Deep bass</button><button id="undo-preset" disabled>Undo</button></div><button id="toggle-tone" aria-expanded="true" aria-controls="tone-panel">Sound controls</button></div>
+      <div class="sound-heading"><div class="preset-buttons" role="group" aria-label="Sound starting points"><button data-preset="flat">Flat</button><button data-preset="punch">Punch</button><button data-preset="deep">Deep bass</button><button id="undo-preset" disabled>Undo</button></div><button id="toggle-tone" aria-expanded="true" aria-controls="tone-panel">Sound controls</button></div>
       <section id="tone-panel" class="tone-panel" aria-label="Bass and punch controls">
         <p id="tone-help" class="small muted">Listening starting point · adjust, then Apply.</p>
         <div class="tone-sliders">
@@ -75,8 +79,9 @@
       <p id="eq-confirm-summary" class="small"></p>
       <div class="confirm-table-wrap"><table class="confirm-table"><thead><tr><th>Band</th><th>Type</th><th>Hz</th><th>dB</th><th>Q</th></tr></thead><tbody id="eq-confirm-bands"></tbody></table></div>
       <p id="eq-confirm-backup" class="small muted"></p>
+      <p id="eq-confirm-gain-warning" class="small invalid-draft" hidden></p>
       <p class="small muted">Choose Custom EQ in Nothing X first. For bass presets: ANC High, bass slider minimum, spatial audio off. Then close Nothing X if it holds the connection.</p>
-      <label class="custom-mode-check"><input id="custom-mode-confirmed" type="checkbox" required> Custom EQ is selected in Nothing X.</label>
+      <label class="custom-mode-check"><input id="custom-mode-confirmed" type="checkbox" required><span id="custom-mode-label">Custom EQ is selected in Nothing X.</span></label>
       <p id="eq-confirm-result" class="small" role="status" aria-live="polite"></p>
       <div class="preview-actions"><button id="cancel-eq" type="button">Cancel</button><button id="confirm-eq" type="submit" class="primary">Apply and verify</button></div>
     </form>

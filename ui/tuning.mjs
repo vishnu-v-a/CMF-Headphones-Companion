@@ -2,6 +2,7 @@ import { responseDb } from './response.mjs';
 
 // Listening starting points, not measurements of Sony/Realme or firmware limits.
 export const presets = {
+  flat: { name: 'Flat', deep: 0, punch: 0, clarity: 0 },
   punch: { name: 'Punch', deep: 30, punch: 65, clarity: 45 },
   deep: { name: 'Deep bass', deep: 70, punch: 35, clarity: 35 },
 };
@@ -16,8 +17,9 @@ export function headroom(profile) {
     if (!Number.isFinite(db)) throw Error('These values cannot be used to estimate headroom.');
     peak = Math.max(peak, db);
   }
-  // Extra margin, rounded toward attenuation. This is not a true-peak meter.
-  const recommended = -Math.ceil((Math.max(0, peak) + 1) * 10) / 10;
+  // Positive filter peaks get 1 dB extra margin, rounded toward attenuation.
+  // Flat/cut-only curves keep 0 dB preamp. This is not a true-peak meter.
+  const recommended = peak > 1e-8 ? -Math.ceil((peak + 1) * 10) / 10 : 0;
   return { peak, recommended, outputPeak: peak + profile.preamp };
 }
 

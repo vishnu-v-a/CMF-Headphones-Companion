@@ -1,6 +1,23 @@
 # CMF Headphone Pro EQ investigation
 
-Tested on firmware **1.0.1.49** with Nothing X **3.10.0**, 14 October 2026.
+## Experimental Bluetooth gain
+
+The updated companion adds **Controls → Bluetooth gain trial**, with explicit
+flat-EQ trials at +1/+2/+3 dB and a **Flat 0 dB** reset. Start at +1 dB;
+the backend permits increases of at most 1 dB from a fresh flat-EQ read.
+Positive gain may clip, be limited, be rejected, or have no audible effect.
+This is not a verified amplifier/volume-cap unlock. Original backups and
+write/readback verification are retained. No hardware gain validation has
+been completed. See [the gain trial notes](docs/BLUETOOTH-GAIN-TRIAL.md).
+
+Fresh editor drafts now start at Flat, 0 dB. Saved drafts reopen without
+applying, and ordinary EQ Apply still prevents positive preamp.
+
+## Established EQ evidence
+
+The earlier EQ investigation was tested on firmware **1.0.1.49** with
+Nothing X **3.10.0**, 14 October 2026. This is separate from the unverified
+positive-gain trial described above.
 
 The headphone accepts **eight custom EQ filters** through `0xF041`; nine and ten did not retain their requested settings. The owner confirmed eighth-filter playback effect. A seven-filter AutoEQ profile with **−6.1 dB preamp** was verified and survived a power cycle.
 
@@ -57,14 +74,15 @@ Python prototype's backups. Readback verifies stored values, not audible
 Custom-mode activation. More bass can require more preamp attenuation;
 these features do not unlock additional Bluetooth amplifier output.
 
-Spatial writes and Windows volume remain unavailable.
-The new Rust transport still requires a GitHub Actions build and live-device
-verification; the earlier Python hardware findings are not verification of
-this Rust connection implementation.
+Spatial writes and Windows endpoint-volume control remain unavailable.
+The earlier desktop build (`6640bf1`) compiled on GitHub on 21 October 2026;
+the owner subsequently confirmed audible preamp and peak-filter changes and
+preferred flat Custom EQ at 0 dB. Those observations do not establish the
+new positive-gain trial's behavior.
 
 See [the Punch implementation notes](docs/PUNCH-IMPLEMENTATION.md) for
 usage, failure handling, and the remaining Windows/hardware checks. This
-revision has not yet been built on GitHub or exercised on live headphones.
+gain revision still needs a GitHub build and live headphone validation.
 
 The commands below run the older Python investigation page.
 
