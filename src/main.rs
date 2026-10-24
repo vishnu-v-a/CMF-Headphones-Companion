@@ -113,7 +113,8 @@ async fn apply_eq(
 
 #[tauri::command]
 async fn set_bluetooth_gain(
-    gain_db: f32,
+    delta_db: i8,
+    expected_eq: Profile,
     address: String,
     firmware: String,
     custom_mode_confirmed: bool,
@@ -125,10 +126,24 @@ async fn set_bluetooth_gain(
         controller
             .lock()
             .map_err(|_| "Bluetooth state unavailable.")?
-            .set_bluetooth_gain(gain_db, &address, &firmware, custom_mode_confirmed, gain_trial_confirmed)
+            .set_bluetooth_gain(delta_db, expected_eq, &address, &firmware, custom_mode_confirmed, gain_trial_confirmed)
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn undo_bluetooth_gain(expected_eq: Profile, address: String, firmware: String, custom_mode_confirmed: bool, state: tauri::State<'_, BluetoothState>) -> Result<ConnectionStatus, String> {
+    let controller = state.inner().0.clone();
+    tauri::async_runtime::spawn_blocking(move || controller.lock().map_err(|_| "Bluetooth state unavailable.")?.undo_bluetooth_gain(expected_eq, &address, &firmware, custom_mode_confirmed))
+        .await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn set_spatial(mode: u8, address: String, firmware: String, confirmed: bool, state: tauri::State<'_, BluetoothState>) -> Result<ConnectionStatus, String> {
+    let controller = state.inner().0.clone();
+    tauri::async_runtime::spawn_blocking(move || controller.lock().map_err(|_| "Bluetooth state unavailable.")?.set_spatial(mode, &address, &firmware, confirmed))
+        .await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -205,6 +220,8 @@ fn main() {
             set_anc,
             apply_eq,
             set_bluetooth_gain,
+            undo_bluetooth_gain,
+            set_spatial,
             restore_eq,
             snapshot_profile
         ])

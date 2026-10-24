@@ -184,6 +184,16 @@ pub fn decode_spatial(payload: &[u8]) -> Result<(bool, Option<bool>), String> {
     Ok((payload[0] == 1, payload.get(1).map(|byte| *byte == 1)))
 }
 
+/// Mode-valued C04F response: 0 off, 2 concert, 3 theatre/cinema.
+/// Preserve mode 1/4 as other modes; never interpret an unknown mode as Off.
+pub fn decode_spatial_mode(payload: &[u8]) -> Result<(u8, Option<bool>), String> {
+    if payload.is_empty() || payload.len() > 2 || payload[0] > 4
+        || payload.get(1).is_some_and(|head| *head > 1) {
+        return Err("Unrecognized spatial mode response.".into());
+    }
+    Ok((payload[0], payload.get(1).map(|head| *head == 1)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

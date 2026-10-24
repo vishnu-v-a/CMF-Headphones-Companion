@@ -1,8 +1,19 @@
 # CMF Headphone Pro EQ investigation
 
-## Experimental Bluetooth gain
+## Direct gain, spatial audio and preset previews
 
-The updated companion adds **Controls → Bluetooth gain trial**, with explicit
+The current UI uses **Controls → Output gain → − / +**, preserving the
+headphone's current EQ bands. **Undo step** restores the previous gain,
+including after reconnect when the stored EQ still matches. First use in
+each connection asks for confirmation; later steps apply directly.
+Spatial Off/Cinema/Concert now have a reference-backed mode mapping and
+require matching mode readback. Owner validation of audible modes remains
+pending. Preset cards are explicitly marked as editor previews.
+See [the redesign notes](docs/CONTROL-REDESIGN.md) for behavior and checks.
+
+## Earlier flat-only gain trial
+
+The previous build added **Controls → Bluetooth gain trial**, with explicit
 flat-EQ trials at +1/+2/+3 dB and a **Flat 0 dB** reset. Start at +1 dB;
 the backend permits increases of at most 1 dB from a fresh flat-EQ read.
 Positive gain may clip, be limited, be rejected, or have no audible effect.
@@ -74,7 +85,8 @@ Python prototype's backups. Readback verifies stored values, not audible
 Custom-mode activation. More bass can require more preamp attenuation;
 these features do not unlock additional Bluetooth amplifier output.
 
-Spatial writes and Windows endpoint-volume control remain unavailable.
+Windows endpoint-volume control remains unavailable. Spatial writes use
+the new mode-valued readback path described in the redesign notes.
 The earlier desktop build (`6640bf1`) compiled on GitHub on 21 October 2026;
 the owner subsequently confirmed audible preamp and peak-filter changes and
 preferred flat Custom EQ at 0 dB. Those observations do not establish the

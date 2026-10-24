@@ -1,7 +1,7 @@
 //! Windows Bluetooth Classic control connection with verified setting writes.
-use crate::autoeq::{Filter, Profile};
+use crate::autoeq::Profile;
 use crate::protocol::{self, Decoder};
-use crate::snapshots::{SnapshotInfo, SnapshotStore};
+use crate::snapshots::{GainUndoInfo, SnapshotInfo, SnapshotStore};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -28,6 +28,7 @@ pub struct ConnectionStatus {
     pub anc_mode: Option<u8>,
     pub last_anc_mode: Option<u8>,
     pub spatial: Option<bool>,
+    pub spatial_mode: Option<u8>,
     pub head_tracking: Option<bool>,
     pub eq: Option<Profile>,
     pub warnings: Vec<String>,
@@ -37,6 +38,8 @@ pub struct ConnectionStatus {
     /// Empty until a write is attempted; then pending, verified, different, or uncertain.
     pub eq_write_state: String,
     pub eq_write_note: Option<String>,
+    pub gain_undo: Option<GainUndoInfo>,
+    pub gain_error: Option<String>,
 }
 
 #[derive(Default)]
@@ -134,10 +137,23 @@ impl Controller {
     fn update_snapshot_status(&mut self) {
         self.status.snapshot = None;
         self.status.snapshot_error = None;
+        self.status.gain_undo = None;
+        self.status.gain_error = None;
         if let (Some(device), Some(firmware)) = (&self.status.device, &self.status.firmware) {
             match self.snapshots.load(&device.address, firmware) {
                 Ok(snapshot) => self.status.snapshot = snapshot.map(|snapshot| snapshot.info()),
                 Err(error) => self.status.snapshot_error = Some(error),
+            }
+            match self.snapshots.load_gain(&device.address, firmware) {
+                Ok(Some(change)) => {
+                    if let Some(actual) = &self.status.eq {
+                        if matches!((protocol::encode_eq(actual), protocol::encode_eq(&change.after)), (Ok(actual), Ok(after)) if actual == after) {
+                            self.status.gain_undo = Some(GainUndoInfo { preamp: change.before.preamp });
+                        }
+                    }
+                }
+                Ok(None) => (),
+                Err(error) => self.status.gain_error = Some(error),
             }
         }
     }
@@ -218,38 +234,73 @@ impl Controller {
         Ok(baseline)
     }
 
-    /// Experimental custom-EQ digital gain, not a master-volume or limiter unlock.
+    /// Adjust only the currently stored preamp, preserving all current filters.
     pub fn set_bluetooth_gain(
         &mut self,
-        gain_db: f32,
+        delta_db: i8,
+        expected_eq: Profile,
         address: &str,
         firmware: &str,
         custom_mode_confirmed: bool,
         gain_trial_confirmed: bool,
     ) -> Result<ConnectionStatus, String> {
-        if !gain_db.is_finite() || !(0.0..=3.0).contains(&gain_db) || gain_db.fract() != 0.0 {
-            return Err("Bluetooth gain trial supports only 0, +1, +2 or +3 dB.".into());
+        if !matches!(delta_db, -1 | 1) {
+            return Err("Adjust gain by exactly one dB at a time.".into());
         }
-        if gain_db > 0.0 && !gain_trial_confirmed {
-            return Err("Review and acknowledge the clipping risk before a positive gain trial.".into());
+        if !gain_trial_confirmed {
+            return Err("Enable direct gain control and acknowledge the clipping risk first.".into());
         }
         let baseline = self.prepare_eq_write(address, firmware, custom_mode_confirmed)?;
-        if gain_db > 0.0 {
-            if baseline.filters.iter().any(|filter| filter.gain != 0.0)
-                || !(0.0..=3.0).contains(&baseline.preamp)
-            {
-                return Err("Apply Flat 0 dB first, then review the gain trial again.".into());
-            }
-            if gain_db > baseline.preamp + 1.0 {
-                return Err("Increase by at most 1 dB per trial. Start with +1 dB.".into());
-            }
+        if protocol::encode_eq(&baseline)? != protocol::encode_eq(&expected_eq)? {
+            return Err("Headphone EQ changed since it was displayed. Review the refreshed device settings and try again.".into());
         }
-        self.write_eq(Profile {
-            name: if gain_db == 0.0 { "Flat 0 dB".into() } else { format!("Bluetooth gain trial +{gain_db} dB") },
-            preamp: gain_db,
-            filters: vec![Filter { id: 1, kind: "PK".into(), frequency: 980.0, gain: 0.0, q: 0.66 }],
-            disabled_filters: vec![],
-        })
+        let mut profile = baseline.clone();
+        profile.preamp += f32::from(delta_db);
+        if !profile.preamp.is_finite() || !(-30.0..=3.0).contains(&profile.preamp) {
+            return Err("Direct gain is limited to -30 through +3 dB preamp. These are app bounds, not manufacturer safety limits.".into());
+        }
+        self.snapshots.stage_gain(address, firmware, &baseline, &profile)?;
+        self.write_eq(profile)
+    }
+
+    pub fn undo_bluetooth_gain(&mut self, expected_eq: Profile, address: &str, firmware: &str, custom_mode_confirmed: bool) -> Result<ConnectionStatus, String> {
+        let baseline = self.prepare_eq_write(address, firmware, custom_mode_confirmed)?;
+        let change = self.snapshots.load_gain(address, firmware)?.ok_or("No gain change is available to undo.")?;
+        let actual = protocol::encode_eq(&baseline)?;
+        if actual != protocol::encode_eq(&expected_eq)? || actual != protocol::encode_eq(&change.after)? {
+            return Err("Headphone EQ changed. Undo will not replace your newer settings.".into());
+        }
+        self.write_eq(change.before)
+    }
+
+    pub fn set_spatial(&mut self, mode: u8, address: &str, firmware: &str, confirmed: bool) -> Result<ConnectionStatus, String> {
+        if !matches!(mode, 0 | 2 | 3) || !confirmed {
+            return Err("Review spatial control before selecting Off, Concert or Cinema.".into());
+        }
+        self.confirm_write_target(address, firmware)?;
+        let device_name = self.status.device.as_ref().ok_or("Headphones are not connected.")?.name.to_ascii_lowercase();
+        if !device_name.contains("cmf headphone pro") {
+            return Err("Spatial mode writes are only mapped for CMF Headphone Pro (B175).".into());
+        }
+        let session = self.session.as_mut().ok_or("Headphones are not connected.")?;
+        let before = session.request(0xc04f, &[], 3).and_then(|bytes| protocol::decode_spatial_mode(&bytes))?;
+        self.status.spatial_mode = Some(before.0);
+        let acknowledgement = session.request(0xf052, &[mode, 0], 3);
+        let readback = session.request(0xc04f, &[], 3).and_then(|bytes| protocol::decode_spatial_mode(&bytes));
+        self.status.spatial_mode = None;
+        self.status.spatial = None;
+        self.status.head_tracking = None;
+        let (actual, head) = readback.map_err(|error| format!("Spatial write is uncertain: {error}. Read settings before retrying."))?;
+        self.status.spatial_mode = Some(actual);
+        self.status.spatial = Some(actual != 0);
+        self.status.head_tracking = head;
+        if actual != mode || head == Some(true) {
+            return Err("Spatial mode readback differs from the requested mode. Check Nothing X; no automatic retry was made.".into());
+        }
+        if let Err(error) = acknowledgement {
+            self.status.warnings.push(format!("Spatial mode matches readback; acknowledgement unavailable: {error}"));
+        }
+        Ok(self.status())
     }
 
     pub fn snapshot_profile(&self) -> Result<Profile, String> {
@@ -299,6 +350,7 @@ impl Controller {
         let read_error = readback.as_ref().err().cloned();
         self.status.eq = readback.ok();
         self.update_eq_verification();
+        self.update_snapshot_status();
         if let Err(error) = acknowledgement {
             self.status.eq_write_note = Some(format!("Write acknowledgement unavailable: {error}"));
         }
@@ -382,6 +434,7 @@ impl Session {
         status.anc_mode = None;
         status.last_anc_mode = None;
         status.spatial = None;
+        status.spatial_mode = None;
         status.head_tracking = None;
         match self
             .request(0xc044, &[], 8)
@@ -432,10 +485,11 @@ impl Session {
         }
         match self
             .request(0xc04f, &[], 3)
-            .and_then(|bytes| protocol::decode_spatial(&bytes))
+            .and_then(|bytes| protocol::decode_spatial_mode(&bytes))
         {
-            Ok((enabled, tracking)) => {
-                status.spatial = Some(enabled);
+            Ok((mode, tracking)) => {
+                status.spatial_mode = Some(mode);
+                status.spatial = Some(mode != 0);
                 status.head_tracking = tracking;
             }
             Err(error) => status
