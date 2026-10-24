@@ -65,7 +65,9 @@ The Android workflow installs the pinned Tauri CLI 2.12.4, Android SDK and NDK
 are ignored. The shared app uses Cargo feature `app`; `desktop` remains an
 alias so the existing Windows build command continues working.
 
-Command: `tauri android build --debug --apk --target aarch64 --features app --ci`.
+The root package.json/package-lock.json configure only the pinned Tauri build
+launcher and its `tauri` script, which the generated Gradle task calls.
+Command: `npm run tauri -- android build --debug --apk --target aarch64 --features app --ci`.
 No automated tests are run, in accordance with AGENTS.md. The debug signing
 key is cached on GitHub Actions for convenient updates, but cache loss may
 change the debug signature and require uninstalling before another trial
