@@ -1,5 +1,10 @@
 # CMF Headphone Pro EQ investigation
 
+The interface now has a Nothing-inspired black-and-white glossy finish,
+with local dot-matrix display typography and monochrome controls. See
+[the design notes](docs/MONOCHROME-DESIGN.md). This visual update does not
+change EQ, gain or Bluetooth behavior.
+
 ## Direct gain, spatial audio and preset previews
 
 The current UI uses **Controls → Output gain → − / +**, preserving the
