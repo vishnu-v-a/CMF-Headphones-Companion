@@ -1,5 +1,10 @@
 # CMF Headphone Pro EQ investigation
 
+The EQ graph supports mouse/pen dragging and Android touch: move numbered
+points for frequency/gain, or tap for precise band settings. Output gain now
+allows one-dB steps up to +10 dB, with the existing confirmation and recovery
+checks. See [graph editing and gain notes](docs/TOUCH-EQ.md).
+
 ## Android
 
 The Android build keeps the same Rust logic and monochrome interface. Download

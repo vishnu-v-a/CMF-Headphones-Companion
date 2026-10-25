@@ -1,4 +1,4 @@
-import { responseDb } from './response.mjs';
+import { createEqGraph } from './graph-editor.mjs';
 import { presets, tuningProfile, headroom, exportProfile } from './tuning.mjs';
 import { createProfileLibrary } from './profile-library.mjs';
 
@@ -18,6 +18,7 @@ let connection = { connected: false }, connectionBusy = false, pollTimer;
 let ancExpanded = false;
 let gainConsentKey = null, spatialConsentKey = null;
 let profileLibrary = null;
+let eqGraph = null;
 const deviceKey = () => connection.connected ? `${connection.device.address}|${connection.firmware}` : null;
 const cloneProfile = profile => JSON.parse(JSON.stringify(profile));
 const spatialNames = {0:'Off',2:'Concert',3:'Cinema'};
@@ -351,6 +352,13 @@ function closeBandEditor(restoreFocus = true) {
 function openBandEditor(index) {
   $('#tone-panel').hidden = true;
   $('#toggle-tone').setAttribute('aria-expanded', 'false');
+  selectGraphBand(index);
+  $('#band-editor').hidden = false;
+  update();
+  $('#band-enabled').focus();
+}
+
+function selectGraphBand(index) {
   selectedBand = index;
   const filter = rows[index];
   $('#band-title').textContent = `Band ${String(index + 1).padStart(2, '0')}`;
@@ -361,9 +369,6 @@ function openBandEditor(index) {
     input.value = Number.isFinite(filter[field]) ? filter[field] : '';
     input.setCustomValidity(field === 'q' && filter.q <= 0 ? 'Q must be greater than zero.' : '');
   }
-  $('#band-editor').hidden = false;
-  update();
-  $('#band-enabled').focus();
 }
 
 function renderBands() {
@@ -395,13 +400,13 @@ function update() {
     const filter = rows[index];
     const frequency = Number.isFinite(filter.frequency) ? String(Number((filter.frequency >= 1000 ? filter.frequency / 1000 : filter.frequency).toFixed(1))) + (filter.frequency >= 1000 ? 'k' : '') : '?';
     const invalid = filter.enabled && !validBand(filter);
-    const selected = index === selectedBand && !$('#band-editor').hidden;
+    const selected = index === selectedBand && (!$('#band-editor').hidden || eqGraph?.dragging);
     button.querySelector('strong').textContent = String(index + 1).padStart(2, '0');
     button.querySelector('span').textContent = filter.enabled ? `${frequency} Hz` : 'Off';
     button.classList.toggle('off', !filter.enabled);
     button.classList.toggle('invalid', invalid);
     button.setAttribute('aria-pressed', String(selected));
-    button.setAttribute('aria-expanded', String(selected));
+    button.setAttribute('aria-expanded', String(index === selectedBand && !$('#band-editor').hidden));
     button.setAttribute('aria-label', `Edit band ${index + 1}, ${filter.enabled ? 'enabled' : 'disabled'}, ${filter.frequency} Hz, ${filter.gain} dB, Q ${filter.q}${invalid ? ', invalid settings' : ''}`);
     button.title = `Band ${index + 1} · ${filter.frequency} Hz · ${filter.gain} dB · Q ${filter.q}${invalid ? ' · Check settings' : ''}`;
   }
@@ -411,35 +416,13 @@ function update() {
   try {
     const current=draft();
     if(!Number.isFinite(current.preamp)||current.filters.some(f=>![f.frequency,f.gain,f.q].every(Number.isFinite)||f.q<=0))throw Error('Enter finite EQ values and a positive Q.');
-    draw(current);
-  } catch(error){$('#response').replaceChildren();}
+    eqGraph?.draw(current);
+  } catch(error){eqGraph?.clear();}
   renderEqState();
 }
 
-function draw(profile) {
-  const svg=$('#response'), ns='http://www.w3.org/2000/svg';
-  svg.replaceChildren();
-  const height = svg.clientWidth ? Math.max(160, svg.clientHeight * 920 / svg.clientWidth) : 240;
-  const bottom = height - 32;
-  svg.setAttribute('viewBox', `0 0 920 ${height}`);
-  const add=(tag,attributes,text)=>{const el=document.createElementNS(ns,tag);for(const [key,value]of Object.entries(attributes))el.setAttribute(key,value);if(text)el.textContent=text;svg.append(el);return el;};
-  const points=Array.from({length:321},(_,i)=>{const hz=20*1000**(i/320);return {hz,db:responseDb(profile.filters,profile.preamp,hz)};});
-  if(points.some(p=>!Number.isFinite(p.db)))throw Error('These filter values cannot be plotted.');
-  const lo=Math.floor(Math.min(-12,...points.map(p=>p.db))/6)*6,hi=Math.ceil(Math.max(6,...points.map(p=>p.db))/6)*6;
-  const x=hz=>42+Math.log(hz/20)/Math.log(1000)*858,y=db=>12+(hi-db)/(hi-lo)*(bottom-12);
-  for(let i=0;i<=4;i++){const db=lo+(hi-lo)*i/4;add('line',{x1:42,x2:900,y1:y(db),y2:y(db),class:Math.abs(db)<.01?'zero-line':'grid-line'});add('text',{x:32,y:y(db)+3,'text-anchor':'end',class:'axis-label'},`${db.toFixed(0)}`);}
-  for(const hz of [20,50,100,200,500,1000,2000,5000,10000,20000]){add('line',{x1:x(hz),x2:x(hz),y1:12,y2:bottom,class:'grid-line'});add('text',{x:x(hz),y:height-9,'text-anchor':'middle',class:'axis-label'},hz>=1000?`${hz/1000}k`:`${hz}`);}
-  const path=points.map((p,i)=>`${i?'L':'M'}${x(p.hz).toFixed(2)},${y(p.db).toFixed(2)}`).join(' ');
-  add('path',{d:`${path} L900,${bottom} L42,${bottom} Z`,class:'curve-fill'});add('path',{d:path,class:'curve'});
-  const band = rows[selectedBand];
-  if (band?.enabled) {
-    const db = responseDb(profile.filters, profile.preamp, band.frequency);
-    add('line', {x1:x(band.frequency),x2:x(band.frequency),y1:12,y2:bottom,class:'band-guide'});
-    add('circle', {cx:x(band.frequency),cy:y(db),r:7,class:'band-dot'});
-  }
-}
-
 function useProfile(profile, condition = 'Imported draft · match ANC to the profile’s measurement condition.', tone = null) {
+  eqGraph?.cancel();
   closeBandEditor(false);
   toneValues = tone ? {...tone} : null;
   name=profile.name;skipped=profile.disabled_filters;rows=profile.filters.map(filter=>({...filter,enabled:true}));
@@ -510,7 +493,7 @@ function renderEqState() {
   const currentGain = connection.eq?.preamp;
   const gainReady = canWrite && connection.eq && !connection.gain_error;
   $('#gain-down').disabled = !gainReady || currentGain - 1 < -30;
-  $('#gain-up').disabled = !gainReady || currentGain + 1 > 3;
+  $('#gain-up').disabled = !gainReady || currentGain + 1 > 10;
   $('#undo-gain').disabled = !gainReady || !connection.gain_undo;
   $('#gain-value').value = Number.isFinite(currentGain) ? `${currentGain > 0 ? '+' : ''}${Number(currentGain.toFixed(1))} dB` : '— dB';
   $('#gain-status').textContent = connection.connected ? deviceSoundName() : 'On headphones';
@@ -696,7 +679,7 @@ async function reviewEq(action, value = null) {
     if (action === 'spatial') $('#eq-confirm-backup').textContent = 'Uses the B175 reference mode mapping and verifies mode readback. Audible Cinema/Concert behavior still needs owner confirmation. Your editor draft is kept.';
     $('#eq-confirm-gain-warning').hidden = !isGain && action !== 'spatial';
     $('#eq-confirm-gain-warning').textContent = isGain
-      ? 'Gain can clip, trigger limiting or have no audible benefit. The app adds no audio limiter. Lower playback volume first. After this confirmation, − / + apply directly until disconnect. Stored gain may persist; +3 dB is an app bound, not a manufacturer safety limit.'
+      ? 'Gain can clip, trigger limiting or have no audible benefit. The app adds no audio limiter. Lower playback volume first. After this confirmation, − / + apply directly until disconnect. Stored gain may persist; +10 dB is an app bound, not a manufacturer safety limit.'
       : action === 'spatial' ? 'After this confirmation, the spatial buttons apply directly until disconnect. The setting may persist. Select Off to disable spatial audio.' : '';
     $('#custom-mode-label').textContent = isGain
       ? 'Custom EQ is selected in Nothing X. Enable direct gain adjustments for this connection; I understand the clipping risk.'
@@ -810,11 +793,30 @@ profileLibrary = createProfileLibrary({
     catch { /* The named file is saved even if the single working-draft cache is unavailable. */ }
   },
 });
+eqGraph = createEqGraph($('#response'), {
+  state: () => ({ rows, selectedBand, profile: draft() }),
+  select(index) { selectGraphBand(index); update(); },
+  open: openBandEditor,
+  refresh: update,
+  begin(index) {
+    const original = {...rows[index]}, tone = toneValues, undo = previousDraft;
+    previousDraft = captureDraft(); $('#undo-preset').disabled = false;
+    return () => {
+      rows[index] = original; toneValues = tone; previousDraft = undo;
+      $('#undo-preset').disabled = !previousDraft;
+      selectGraphBand(index); syncToneControls(); update();
+    };
+  },
+  edit(index, frequency, gain) {
+    rows[index].frequency = frequency; rows[index].gain = gain;
+    toneValues = null; syncToneControls(); selectGraphBand(index); update();
+  },
+});
 initializeDraft();
 profileLibrary.refresh();
 new ResizeObserver(() => {
-  try { draw(draft()); }
-  catch { $('#response').replaceChildren(); }
+  try { eqGraph.resize(); }
+  catch { eqGraph.clear(); }
 }).observe($('#response'));
 renderConnection();
 if (invoke) {

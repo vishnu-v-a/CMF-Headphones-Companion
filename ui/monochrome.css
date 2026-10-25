@@ -240,6 +240,14 @@ dialog { background: linear-gradient(145deg, #222222, #0c0c0c 70%); border-color
 .android .eq-actions button { padding-left: 7px; padding-right: 7px; }
 .android .band-button { padding-left: 1px; padding-right: 1px; }
 
+#response { touch-action: none; user-select: none; -webkit-user-select: none; }
+#response.dragging, #response.dragging * { cursor: grabbing; }
+.graph-handle { fill: #c6c6c6; stroke: #080808; stroke-width: 1.5px; vector-effect: non-scaling-stroke; cursor: grab; }
+.graph-handle.selected { fill: #ffffff; }
+.graph-handle:focus-visible { outline: none; stroke: #ffffff; stroke-width: 4px; }
+.graph-handle-number { fill: #080808; font-weight: 750; pointer-events: none; }
+#graph-readout { white-space: nowrap; font-size: 10px; }
+
 @media (prefers-reduced-motion: reduce) {
     button { transition: none; }
 }

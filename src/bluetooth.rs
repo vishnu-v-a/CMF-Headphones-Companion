@@ -256,8 +256,8 @@ impl Controller {
         }
         let mut profile = baseline.clone();
         profile.preamp += f32::from(delta_db);
-        if !profile.preamp.is_finite() || !(-30.0..=3.0).contains(&profile.preamp) {
-            return Err("Direct gain is limited to -30 through +3 dB preamp. These are app bounds, not manufacturer safety limits.".into());
+        if !profile.preamp.is_finite() || !(-30.0..=10.0).contains(&profile.preamp) {
+            return Err("Direct gain is limited to -30 through +10 dB preamp. These are app bounds, not manufacturer safety limits.".into());
         }
         self.snapshots.stage_gain(address, firmware, &baseline, &profile)?;
         self.write_eq(profile)

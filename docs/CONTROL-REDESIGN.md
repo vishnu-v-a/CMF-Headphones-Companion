@@ -21,7 +21,7 @@ UI only for that device/firmware and clears on disconnect or restart;
 firmware/address changes require fresh confirmation. Startup, selection
 and reconnect never write gain automatically.
 
-The backend validates one-dB steps and -30 to +3 dB control bounds. These
+The backend validates one-dB steps and -30 to +10 dB control bounds. These
 are app limits, not manufacturer safety limits. Positive gain and acoustic
 output remain unmeasured. Clipping, limiting, rejection or little audible
 benefit remain possible. Ordinary Apply retains its headroom checks.
