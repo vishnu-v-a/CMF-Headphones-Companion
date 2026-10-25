@@ -21,10 +21,12 @@ UI only for that device/firmware and clears on disconnect or restart;
 firmware/address changes require fresh confirmation. Startup, selection
 and reconnect never write gain automatically.
 
-The backend validates one-dB steps and -30 to +10 dB control bounds. These
-are app limits, not manufacturer safety limits. Positive gain and acoustic
-output remain unmeasured. Clipping, limiting, rejection or little audible
-benefit remain possible. Ordinary Apply retains its headroom checks.
+The backend validates one-dB steps without imposing a dB range. Finite
+32-bit numbers and representable one-dB changes are required. Positive gain
+and acoustic output remain unmeasured. Clipping, limiting, rejection or little
+audible benefit remain possible. Ordinary Apply accepts manually chosen
+preamp and band gains; headroom estimates are informational. See
+[manual EQ](MANUAL-EQ.md).
 
 Before each gain write, firmware and actual EQ are read again. The encoded
 EQ must match the UI's expected EQ; stale expectations cause a refusal with

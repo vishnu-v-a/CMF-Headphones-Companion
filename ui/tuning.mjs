@@ -23,7 +23,8 @@ export function headroom(profile) {
   return { peak, recommended, outputPeak: peak + profile.preamp };
 }
 
-export function tuningProfile(values, name = 'Custom punch') {
+export function tuningProfile(values, name = 'Custom punch', preamp = 0) {
+  if (!Number.isFinite(preamp)) throw Error('Enter a finite preamp value.');
   for (const key of ['deep', 'punch', 'clarity']) {
     if (!Number.isFinite(values[key]) || values[key] < 0 || values[key] > 100) {
       throw Error('Sound controls must be between 0 and 100.');
@@ -31,7 +32,7 @@ export function tuningProfile(values, name = 'Custom punch') {
   }
   const deep = values.deep / 100, punch = values.punch / 100, clarity = values.clarity / 100;
   const profile = {
-    name, preamp: 0, disabled_filters: [],
+    name, preamp, disabled_filters: [],
     filters: [
       { id: 1, kind: 'LS', frequency: 50, gain: 4 * deep, q: 0.7 },
       { id: 2, kind: 'PK', frequency: 95, gain: 4 * punch, q: 0.85 },
@@ -39,7 +40,6 @@ export function tuningProfile(values, name = 'Custom punch') {
       { id: 4, kind: 'PK', frequency: 2300, gain: 1.2 * clarity, q: 0.8 },
     ],
   };
-  profile.preamp = headroom(profile).recommended;
   return profile;
 }
 

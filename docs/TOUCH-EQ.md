@@ -1,12 +1,12 @@
-# Editable EQ graph and +10 dB gain ceiling
+# Editable EQ graph and manual gain
 
 Updated 25 October 2026. The owner reports hearing a gain increase; its size
-and distortion have not been measured. The app now allows device preamp
-steps from -30 to +10 dB instead of +3 dB. This is an application bound, not
-a manufacturer specification. Each change remains one dB, preserves the
-actual device filters, saves recovery/undo records and verifies readback.
-There is no automatic jump to +10. Normal EQ Apply retains its existing
-headroom and positive-preamp restrictions; Output gain remains separate.
+and distortion have not been measured. Output gain now has no app-imposed
+dB range. Each change remains one dB, preserves the actual device filters,
+saves recovery/undo records and verifies readback. Normal EQ Apply permits
+positive preamp and estimated peaks above zero. Presets and sound sliders
+preserve your preamp; Auto headroom runs only when selected. See
+[manual EQ](MANUAL-EQ.md) for the remaining numeric and protocol validation.
 
 ## Graph editing on Windows and Android
 

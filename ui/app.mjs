@@ -434,7 +434,7 @@ function useProfile(profile, condition = 'Imported draft · match ANC to the pro
   syncToneControls();
 }
 
-$('#preamp').oninput=() => { toneValues = null; syncToneControls(); update(); };
+$('#preamp').oninput=() => { update(); };
 $('#close-band').onclick = () => { closeBandEditor(); update(); };
 $('#band-enabled').onchange = event => { toneValues = null; syncToneControls(); rows[selectedBand].enabled = event.target.checked; update(); };
 $('#band-kind').onchange = event => { toneValues = null; syncToneControls(); rows[selectedBand].kind = event.target.value; update(); };
@@ -457,8 +457,8 @@ function syncToneControls() {
   }
   $('#tone-help').textContent = toneValues
     ? Object.values(toneValues).filter(value => typeof value === 'number').every(value => value === 0)
-      ? 'Flat draft · no additional correction or preamp attenuation.'
-      : 'Relative bass tuning · automatic headroom may lower overall level.'
+      ? 'Flat bands · preamp is set separately.'
+      : 'Relative bass tuning · your preamp stays unchanged.'
     : 'Advanced/imported draft · choose a preset to use sound controls.';
   for (const button of document.querySelectorAll('[data-preset]')) {
     button.setAttribute('aria-pressed', String(Boolean(toneValues && name === presets[button.dataset.preset].name)));
@@ -469,14 +469,20 @@ function renderEqState() {
   $('#toggle-tone').textContent = $('#tone-panel').hidden ? 'Tune sound' : 'Show presets';
   let valid = false;
   try {
-    const profile = draft(), estimate = headroom(profile);
-    valid = estimate.outputPeak <= 0 && profile.preamp <= 0;
-    $('#headroom-status').textContent = profile.preamp > 0 ? 'Positive preamp: use Controls → Output gain' : valid
-      ? `Estimated peak ${estimate.outputPeak.toFixed(1)} dB · draft`
-      : `Needs ${estimate.outputPeak.toFixed(1)} dB more headroom`;
-    $('#headroom-status').classList.toggle('invalid-draft', !valid);
-    $('#headroom-status').title = `48 kHz mathematical response estimate, not measured loudness or a guarantee against transient clipping. Suggested preamp: ${estimate.recommended} dB.`;
-    $('#auto-headroom').disabled = false;
+    const profile = draft();
+    valid = true;
+    try {
+      const estimate = headroom(profile);
+      $('#headroom-status').textContent = `Estimated peak ${estimate.outputPeak > 0 ? '+' : ''}${estimate.outputPeak.toFixed(1)} dB · draft${estimate.outputPeak > 0 ? ' · clipping possible' : ''}`;
+      $('#headroom-status').classList.toggle('invalid-draft', estimate.outputPeak > 0);
+      $('#headroom-status').title = `Informational 48 kHz response estimate; it does not block Apply or measure loudness. Auto headroom optionally sets preamp to ${estimate.recommended} dB.`;
+      $('#auto-headroom').disabled = false;
+    } catch {
+      $('#headroom-status').textContent = 'Peak estimate unavailable · manual EQ';
+      $('#headroom-status').title = 'The graph model cannot estimate these values. You can still apply a valid profile.';
+      $('#headroom-status').classList.remove('invalid-draft');
+      $('#auto-headroom').disabled = true;
+    }
     $('#save-draft').disabled = !invoke || Boolean(profileLibrary?.busy);
     $('#save-profile-from-editor').disabled = $('#save-draft').disabled;
     $('#export-draft').disabled = false;
@@ -492,8 +498,8 @@ function renderEqState() {
   const canWrite = Boolean(invoke && connection.connected && !connectionBusy && connection.firmware && !connection.snapshot_error);
   const currentGain = connection.eq?.preamp;
   const gainReady = canWrite && connection.eq && !connection.gain_error;
-  $('#gain-down').disabled = !gainReady || currentGain - 1 < -30;
-  $('#gain-up').disabled = !gainReady || currentGain + 1 > 10;
+  $('#gain-down').disabled = !gainReady;
+  $('#gain-up').disabled = !gainReady;
   $('#undo-gain').disabled = !gainReady || !connection.gain_undo;
   $('#gain-value').value = Number.isFinite(currentGain) ? `${currentGain > 0 ? '+' : ''}${Number(currentGain.toFixed(1))} dB` : '— dB';
   $('#gain-status').textContent = connection.connected ? deviceSoundName() : 'On headphones';
@@ -506,7 +512,7 @@ function renderEqState() {
     $('#gain-peak').classList.toggle('invalid-draft', peak > 0);
   } catch { $('#gain-peak').textContent = 'Connect to read the current gain.'; $('#gain-peak').classList.remove('invalid-draft'); }
   $('#apply-eq').disabled = !canWrite || !valid || !connection.eq;
-  $('#apply-eq').title = !invoke ? 'Open the desktop app to apply EQ.' : !connection.connected ? 'Connect your headphones first.' : !valid ? 'Fix the draft or use Auto headroom.' : connection.snapshot_error || 'Review the selected device and EQ before applying.';
+  $('#apply-eq').title = !invoke ? 'Open the desktop app to apply EQ.' : !connection.connected ? 'Connect your headphones first.' : !valid ? 'Check the preamp and band values.' : connection.snapshot_error || 'Review the selected device and EQ before applying.';
   $('#restore-eq').disabled = !canWrite || !connection.snapshot;
   const eq = connection.eq;
   const states = { verified: 'Last request matches readback', different: 'Readback differs from last request', uncertain: 'EQ uncertain · read again', pending: 'Waiting for readback' };
@@ -527,9 +533,11 @@ function captureDraft() {
 
 for (const button of document.querySelectorAll('[data-preset]')) {
   button.onclick = () => {
+    if (!$('#preamp').checkValidity()) { message('Enter a finite preamp value.', true); return; }
+    const preamp = Number($('#preamp').value);
     try { previousDraft = captureDraft(); } catch { /* An invalid draft is never saved as an undo target. */ }
     const preset = presets[button.dataset.preset];
-    useProfile(tuningProfile(preset, preset.name), preset === presets.flat ? 'Flat custom EQ · 0 dB preamp; no additional correction.' : bassCondition, preset);
+    useProfile(tuningProfile(preset, preset.name, preamp), preset === presets.flat ? 'Flat bands · your preamp stays unchanged.' : bassCondition, preset);
     $('#tone-panel').hidden = true;
     $('#toggle-tone').setAttribute('aria-expanded', 'false');
     renderEqState();
@@ -547,7 +555,11 @@ for (const key of ['deep', 'punch', 'clarity']) {
   $(`#tone-${key}`).oninput = event => {
     if (!toneValues) return;
     const values = {...toneValues, [key]: Number(event.target.value)};
-    useProfile(tuningProfile(values), bassCondition, values);
+    try {
+      if (!$('#preamp').checkValidity()) throw Error('Enter a finite preamp value.');
+      useProfile(tuningProfile(values, undefined, Number($('#preamp').value)), bassCondition, values);
+    }
+    catch (error) { message(error.message, true); }
   };
 }
 $('#toggle-tone').onclick = () => {
@@ -608,7 +620,7 @@ function initializeDraft() {
     let tone = null;
     if (saved.tone) {
       try {
-        const rebuilt = tuningProfile(saved.tone);
+        const rebuilt = tuningProfile(saved.tone, undefined, profile.preamp);
         const same = (left, right) => Math.fround(left) === Math.fround(right);
         if (same(profile.preamp, rebuilt.preamp) && profile.filters.length === rebuilt.filters.length
           && profile.filters.every((filter, index) => filter.kind === rebuilt.filters[index].kind
@@ -656,8 +668,6 @@ async function reviewEq(action, value = null) {
       if (!Number.isFinite(profile.preamp)) throw Error('No gain step is available to undo.');
       profile.name = `${deviceSoundName()} · device gain`;
     }
-    if (action === 'apply' && profile.preamp > 0) throw Error('Use Controls → Output gain for positive preamp.');
-    if (action === 'apply' && headroom(profile).outputPeak > 0) throw Error('Use Auto headroom before applying this draft.');
     writeReview = {action, profile, value, expectedEq, key: deviceKey(), ...target};
     $('#eq-confirm-title').textContent = action === 'inspect' ? 'Headphone EQ readback' : action === 'restore' ? 'Restore your original EQ' : 'Review your EQ';
     if (isGain) $('#eq-confirm-title').textContent = 'Enable direct gain control';
@@ -679,7 +689,7 @@ async function reviewEq(action, value = null) {
     if (action === 'spatial') $('#eq-confirm-backup').textContent = 'Uses the B175 reference mode mapping and verifies mode readback. Audible Cinema/Concert behavior still needs owner confirmation. Your editor draft is kept.';
     $('#eq-confirm-gain-warning').hidden = !isGain && action !== 'spatial';
     $('#eq-confirm-gain-warning').textContent = isGain
-      ? 'Gain can clip, trigger limiting or have no audible benefit. The app adds no audio limiter. Lower playback volume first. After this confirmation, − / + apply directly until disconnect. Stored gain may persist; +10 dB is an app bound, not a manufacturer safety limit.'
+      ? 'Gain can clip, trigger limiting or have no audible benefit. The app adds no audio limiter. Lower playback volume first. After this confirmation, − / + apply directly until disconnect. Stored gain may persist; the app does not enforce a dB range.'
       : action === 'spatial' ? 'After this confirmation, the spatial buttons apply directly until disconnect. The setting may persist. Select Off to disable spatial audio.' : '';
     $('#custom-mode-label').textContent = isGain
       ? 'Custom EQ is selected in Nothing X. Enable direct gain adjustments for this connection; I understand the clipping risk.'

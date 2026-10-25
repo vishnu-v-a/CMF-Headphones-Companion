@@ -1,9 +1,11 @@
 # CMF Headphone Pro EQ investigation
 
 The EQ graph supports mouse/pen dragging and Android touch: move numbered
-points for frequency/gain, or tap for precise band settings. Output gain now
-allows one-dB steps up to +10 dB, with the existing confirmation and recovery
-checks. See [graph editing and gain notes](docs/TOUCH-EQ.md).
+points for frequency/gain, or tap for precise band settings. Preamp and band
+gain are manually adjustable on Windows and Android. Apply permits positive
+preamp and estimated peaks above zero; Auto headroom is optional. Output gain
+has no app-imposed dB range. See [manual EQ](docs/MANUAL-EQ.md) and
+[graph editing](docs/TOUCH-EQ.md).
 
 ## Android
 
@@ -46,8 +48,9 @@ This is not a verified amplifier/volume-cap unlock. Original backups and
 write/readback verification are retained. No hardware gain validation has
 been completed. See [the gain trial notes](docs/BLUETOOTH-GAIN-TRIAL.md).
 
-Fresh editor drafts now start at Flat, 0 dB. Saved drafts reopen without
-applying, and ordinary EQ Apply still prevents positive preamp.
+Fresh editor drafts start at Flat, 0 dB. Saved drafts reopen without applying.
+Ordinary EQ Apply now accepts positive preamp; presets and sound sliders keep
+the preamp you selected.
 
 ## Established EQ evidence
 

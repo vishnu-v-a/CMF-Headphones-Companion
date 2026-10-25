@@ -202,9 +202,6 @@ impl Controller {
         custom_mode_confirmed: bool,
     ) -> Result<ConnectionStatus, String> {
         crate::autoeq::validate(&profile)?;
-        if profile.preamp > 0.0 {
-            return Err("Use the separate Bluetooth gain trial for positive preamp.".into());
-        }
         self.prepare_eq_write(address, firmware, custom_mode_confirmed)?;
         self.write_eq(profile)
     }
@@ -256,8 +253,11 @@ impl Controller {
         }
         let mut profile = baseline.clone();
         profile.preamp += f32::from(delta_db);
-        if !profile.preamp.is_finite() || !(-30.0..=10.0).contains(&profile.preamp) {
-            return Err("Direct gain is limited to -30 through +10 dB preamp. These are app bounds, not manufacturer safety limits.".into());
+        if !profile.preamp.is_finite() {
+            return Err("Preamp must be a finite 32-bit number.".into());
+        }
+        if ((profile.preamp - baseline.preamp) - f32::from(delta_db)).abs() > 0.001 {
+            return Err("A one-dB step cannot be represented at this preamp. Enter the preamp directly in Equalizer.".into());
         }
         self.snapshots.stage_gain(address, firmware, &baseline, &profile)?;
         self.write_eq(profile)

@@ -4,7 +4,7 @@ import { tuningProfile } from './tuning.mjs';
 function savedTone(entry) {
   if (!entry.tone) return null;
   try {
-    const rebuilt = tuningProfile(entry.tone), profile = entry.profile;
+    const profile = entry.profile, rebuilt = tuningProfile(entry.tone, undefined, profile.preamp);
     const same = (a, b) => Math.fround(a) === Math.fround(b);
     if (same(profile.preamp, rebuilt.preamp) && profile.filters.length === rebuilt.filters.length
       && profile.filters.every((f, i) => f.kind === rebuilt.filters[i].kind
