@@ -82,14 +82,16 @@ export function createEqGraph(svg, callbacks) {
     if (!drag.changed && Math.hypot(event.clientX-drag.startX,event.clientY-drag.startY)<3) return;
     const p = point(event); if (!p) return;
     const g = drag.geometry;
-    const frequency = Math.round(20 * 1000 ** ((clamp(p.x-drag.offsetX,42,900)-42)/858));
+    const frequency = Math.abs(event.clientX-drag.startX)<1 ? drag.originalFrequency
+      : Math.round(20 * 1000 ** ((clamp(p.x-drag.offsetX,42,900)-42)/858));
     const targetY = clamp(p.y-drag.offsetY,12,g.bottom);
     const { rows } = callbacks.state(), band = rows[drag.index];
     // Keep horizontal frequency and vertical gain independent, even with overlapping bands.
     // RBJ shelves have half their gain at the cutoff; peaks have their full gain.
     const rawGain = drag.originalGain + (drag.startCentreY-targetY)/(g.bottom-12)*(g.hi-g.lo)*(band.kind==='PK'?1:2);
     if (!Number.isFinite(rawGain)) return;
-    const gain = Math.round(clamp(rawGain,Math.min(-24,drag.originalGain),Math.max(24,drag.originalGain))*10)/10;
+    const gain = Math.abs(event.clientY-drag.startY)<1 ? drag.originalGain
+      : Math.round(clamp(rawGain,Math.min(-24,drag.originalGain),Math.max(24,drag.originalGain))*10)/10;
     if (frequency===band.frequency && gain===band.gain) return;
     if (!drag.changed) { drag.rollback = callbacks.begin(drag.index); drag.changed = true; }
     callbacks.edit(drag.index,frequency,gain);
@@ -120,7 +122,8 @@ export function createEqGraph(svg, callbacks) {
     const hit = candidates[0]; callbacks.select(hit.index);
     const p = point(event); if (!p) return;
     drag = {pointerId:event.pointerId,index:hit.index,startX:event.clientX,startY:event.clientY,
-      offsetX:p.x-hit.x,offsetY:p.y-hit.y,startCentreY:hit.y,geometry:{...geometry},originalGain:hit.band.gain,changed:false};
+      offsetX:p.x-hit.x,offsetY:p.y-hit.y,startCentreY:hit.y,geometry:{...geometry},
+      originalFrequency:hit.band.frequency,originalGain:hit.band.gain,changed:false};
     svg.setPointerCapture(event.pointerId); svg.classList.add('dragging');
   });
   svg.addEventListener('pointermove', event => {
