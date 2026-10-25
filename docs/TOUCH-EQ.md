@@ -20,8 +20,10 @@ headroom and positive-preamp restrictions; Output gain remains separate.
   the stable SVG root while points are redrawn. Single-finger touch, mouse
   and pen share the same implementation; additional pointers are ignored.
 - The scale stays fixed while dragging, then fits the new curve on release.
-  Finger-to-point offset is preserved. Peak/shelf cutoff response is accounted
-  for when mapping the combined curve back to the selected filter's gain.
+  Points do not jump on touch-down. Horizontal moves change frequency without
+  changing gain; vertical movement adjusts gain independently, accounting for
+  peak/shelf cutoff response. Overlapping filters can move the combined curve
+  vertically during a horizontal edit; their settings are not changed.
 - Direct dragging normally bounds gain to ±24 dB. Existing values outside
   that range are preserved as reachable endpoints; numeric controls retain
   their original validation. This is an editor interaction range, not a
